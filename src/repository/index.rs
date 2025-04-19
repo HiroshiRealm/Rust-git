@@ -4,12 +4,14 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use serde::{Serialize, Deserialize};
 
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Index {
     entries: HashMap<PathBuf, IndexEntry>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct IndexEntry {
     pub mtime: u64,
     pub object_id: String,
@@ -33,10 +35,12 @@ impl Index {
         let mut data = Vec::new();
         file.read_to_end(&mut data)?;
         
-        // In a real implementation, we would parse the Git index format here
-        // For simplicity, we'll just return an empty index
+        if data.is_empty() {
+            return Ok(Self::new());
+        }
         
-        Ok(Self::new())
+        let index: Index = bincode::deserialize(&data)?;
+        Ok(index)
     }
     
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
@@ -47,10 +51,8 @@ impl Index {
             fs::create_dir_all(parent)?;
         }
         
-        let _file = fs::File::create(path)?;
-        
-        // In a real implementation, we would serialize the index in Git's format
-        // For simplicity, we'll just save an empty file
+        let data = bincode::serialize(&self)?;
+        fs::write(path, data)?;
         
         Ok(())
     }

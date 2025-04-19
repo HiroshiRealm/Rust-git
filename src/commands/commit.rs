@@ -24,7 +24,7 @@ pub fn execute(message: &str) -> Result<()> {
     };
     
     // Create the commit
-    let author = "In Rust We Git <user@example.com>";
+    let author = "Rust-git <user@example.com>";
     let parent_refs: Vec<&str> = parent_commits.iter().map(|s| s.as_str()).collect();
     
     let commit_id = objects::write_commit(

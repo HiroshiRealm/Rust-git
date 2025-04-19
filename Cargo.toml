@@ -1,5 +1,5 @@
 [package]
-name = "in_rust_we_git"
+name = "rust-git"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,6 +15,8 @@ anyhow = "1.0"
 dirs = "5.0"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 url = "2.4"
+bincode = "1.3"
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3.9"

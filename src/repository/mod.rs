@@ -62,7 +62,7 @@ impl Repository {
             "4b825dc642cb6eb9a060e54bf8d69288fbee4904", // Empty tree
             &[],
             "Initial commit",
-            "In Rust We Git <user@example.com>",
+            "Rust-Git <user@example.com>",
         )?;
         
         // Create the main branch reference

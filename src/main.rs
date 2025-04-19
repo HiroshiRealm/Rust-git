@@ -48,8 +48,12 @@ enum Commands {
     
     /// Switch branches or restore working tree files
     Checkout {
-        /// Branch to checkout
+        /// Branch to checkout or create
         branch: String,
+
+        /// Create a new branch and switch to it
+        #[arg(short = 'b', long = "branch", required = false)]
+        create_branch: bool,
     },
     
     /// Join two or more development histories together
@@ -75,6 +79,13 @@ enum Commands {
         /// Repository to push to
         remote: String,
     },
+
+    /// Pretty-print Git objects
+    CatFile {
+        /// The object to display
+        #[arg(name = "object")]
+        object_hash: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -86,11 +97,12 @@ fn main() -> Result<()> {
         Commands::Rm { paths } => commands::rm::execute(paths)?,
         Commands::Commit { message } => commands::commit::execute(message)?,
         Commands::Branch { name, delete } => commands::branch::execute(name.as_deref(), *delete)?,
-        Commands::Checkout { branch } => commands::checkout::execute(branch)?,
+        Commands::Checkout { branch, create_branch } => commands::checkout::execute(branch, *create_branch)?,
         Commands::Merge { branch } => commands::merge::execute(branch)?,
         Commands::Fetch { remote } => commands::fetch::execute(remote)?,
         Commands::Pull { remote } => commands::pull::execute(remote)?,
         Commands::Push { remote } => commands::push::execute(remote)?,
+        Commands::CatFile { object_hash } => commands::cat_file::execute(object_hash)?,
     }
     
     Ok(())
