@@ -1,0 +1,11 @@
+pub mod init;
+pub mod add;
+pub mod rm;
+pub mod commit;
+pub mod branch;
+pub mod checkout;
+pub mod merge;
+pub mod fetch;
+pub mod pull;
+pub mod push;
+pub mod cat_file; 
