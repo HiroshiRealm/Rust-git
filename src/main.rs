@@ -86,6 +86,9 @@ enum Commands {
         #[arg(name = "object")]
         object_hash: String,
     },
+
+    /// Show the working tree status
+    Status,
 }
 
 fn main() -> Result<()> {
@@ -103,6 +106,7 @@ fn main() -> Result<()> {
         Commands::Pull { remote } => commands::pull::execute(remote)?,
         Commands::Push { remote } => commands::push::execute(remote)?,
         Commands::CatFile { object_hash } => commands::cat_file::execute(object_hash)?,
+        Commands::Status => commands::status::execute()?,
     }
     
     Ok(())

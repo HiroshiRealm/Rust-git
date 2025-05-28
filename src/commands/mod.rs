@@ -8,4 +8,5 @@ pub mod merge;
 pub mod fetch;
 pub mod pull;
 pub mod push;
-pub mod cat_file; 
+pub mod cat_file;
+pub mod status; 

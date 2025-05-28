@@ -67,10 +67,13 @@ impl Index {
             file_path
         };
         
+        // Normalize the path to ensure consistency
+        let normalized_path = super::normalize_path(relative_path);
+        
         let metadata = fs::metadata(file_path)?;
         
         self.entries.insert(
-            relative_path.to_path_buf(),
+            normalized_path,
             IndexEntry {
                 mtime: metadata.modified()?.duration_since(std::time::UNIX_EPOCH)?.as_secs(),
                 object_id: object_id.to_string(),
@@ -108,12 +111,14 @@ impl Index {
             self.add_file(repo_path, path, &object_id)?;
             
             let relative_path = if path.starts_with(repo_path) {
-                path.strip_prefix(repo_path)?.to_string_lossy().to_string()
+                path.strip_prefix(repo_path)?
             } else {
-                path.to_string_lossy().to_string()
+                path
             };
             
-            added_files.push(relative_path);
+            // Normalize the path for consistent output
+            let normalized_relative_path = super::normalize_path(relative_path);
+            added_files.push(normalized_relative_path.to_string_lossy().to_string());
         }
         
         Ok(added_files)
@@ -149,8 +154,11 @@ impl Index {
                 path
             };
             
-            if self.entries.remove(&rel_path.to_path_buf()).is_some() {
-                removed_files.push(rel_path.to_string_lossy().to_string());
+            // Normalize the path before looking it up in the index
+            let normalized_path = super::normalize_path(rel_path);
+            
+            if self.entries.remove(&normalized_path).is_some() {
+                removed_files.push(normalized_path.to_string_lossy().to_string());
             }
         }
         

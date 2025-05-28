@@ -6,6 +6,16 @@ pub mod objects;
 pub mod index;
 pub mod refs;
 
+// Utility function for consistent path normalization across the entire system
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let path_str = path.to_string_lossy();
+    if path_str.starts_with("./") {
+        PathBuf::from(&path_str[2..])
+    } else {
+        path.to_path_buf()
+    }
+}
+
 pub struct Repository {
     pub path: PathBuf,
     pub git_dir: PathBuf,

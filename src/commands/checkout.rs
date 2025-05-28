@@ -9,18 +9,18 @@ pub fn execute(branch_name: &str, create_branch_flag: bool) -> Result<()> {
 
     if create_branch_flag {
         // Check if branch already exists
-        let G_branch_path = repo.git_dir.join("refs/heads").join(branch_name);
-        if G_branch_path.exists() {
+        let g_branch_path = repo.git_dir.join("refs/heads").join(branch_name);
+        if g_branch_path.exists() {
             anyhow::bail!("Branch '{}' already exists", branch_name);
         }
 
-        let G_head_commit = refs::get_head_commit(&repo.git_dir)?;
-        refs::create_branch(&repo.git_dir, branch_name, &G_head_commit)?;
+        let g_head_commit = refs::get_head_commit(&repo.git_dir)?;
+        refs::create_branch(&repo.git_dir, branch_name, &g_head_commit)?;
         println!("Switched to a new branch '{}'", branch_name);
     } else {
         // Check if the branch exists
-        let G_branch_path = repo.git_dir.join("refs/heads").join(branch_name);
-        if !G_branch_path.exists() {
+        let g_branch_path = repo.git_dir.join("refs/heads").join(branch_name);
+        if !g_branch_path.exists() {
             anyhow::bail!("Branch '{}' not found. If you want to create it, use -b option.", branch_name);
         }
         println!("Switched to branch '{}'", branch_name);

@@ -28,6 +28,12 @@ pub fn execute() -> Result<()> {
     // Get files from working directory
     let working_files = get_working_files(&repo)?;
     
+    // Debug: show what's actually in the index
+    println!("DEBUG: Current index contents:");
+    for (path, object_id) in &index_files {
+        println!("  '{}' -> {}", path.display(), &object_id[..8]);
+    }
+    
     // Combine all file paths
     let mut all_files: HashSet<PathBuf> = HashSet::new();
     all_files.extend(head_files.keys().cloned());
@@ -144,9 +150,8 @@ fn get_index_files(repo: &Repository) -> HashMap<PathBuf, String> {
     let mut files = HashMap::new();
     
     for (path, entry) in repo.index.get_entries() {
-        // Normalize path by removing "./" prefix if present
-        let normalized_path = normalize_path(path);
-        files.insert(normalized_path, entry.object_id.clone());
+        // Paths in index are already normalized, just use them directly
+        files.insert(path.clone(), entry.object_id.clone());
     }
     
     files
@@ -167,8 +172,14 @@ fn get_working_files(repo: &Repository) -> Result<HashMap<PathBuf, String>> {
             continue;
         }
         
-        let relative_path = path.strip_prefix(&repo.path)?;
-        let normalized_path = normalize_path(relative_path);
+        let relative_path = if path.starts_with(&repo.path) {
+            path.strip_prefix(&repo.path)?
+        } else {
+            path
+        };
+        
+        // Use the unified normalize_path function
+        let normalized_path = crate::repository::normalize_path(relative_path);
         let content = fs::read(path)?;
         let object_id = objects::hash_object(&content, "blob");
         
@@ -176,16 +187,6 @@ fn get_working_files(repo: &Repository) -> Result<HashMap<PathBuf, String>> {
     }
     
     Ok(files)
-}
-
-// Helper function to normalize paths by removing "./" prefix
-fn normalize_path(path: &Path) -> PathBuf {
-    let path_str = path.to_string_lossy();
-    if path_str.starts_with("./") {
-        PathBuf::from(&path_str[2..])
-    } else {
-        path.to_path_buf()
-    }
 }
 
 fn parse_tree_entries(tree_data: &[u8], files: &mut HashMap<PathBuf, String>) -> Result<()> {
@@ -209,7 +210,7 @@ fn parse_tree_entries(tree_data: &[u8], files: &mut HashMap<PathBuf, String>) ->
                     let sha1_hex = hex::encode(sha1_bytes);
                     
                     // Normalize the path before inserting
-                    let normalized_path = normalize_path(&PathBuf::from(filename));
+                    let normalized_path = crate::repository::normalize_path(&PathBuf::from(filename));
                     files.insert(normalized_path, sha1_hex);
                     cursor = sha1_end;
                 } else {

@@ -13,46 +13,46 @@ pub fn execute(object_hash: &str) -> Result<()> {
     match object_type.as_str() {
         "blob" => {
             // For blobs, just print the content as a string.
-            // Git typically tries to print it as UTF-8, and might warn or error if it's not valid.
+            // git typically tries to print it as UTF-8, and might warn or error if it's not valid.
             // For simplicity, we'll use from_utf8_lossy which will replace invalid UTF-8 sequences.
             print!("{}", String::from_utf8_lossy(&data));
         }
         "tree" => {
-            let mut G_cursor = 0;
-            while G_cursor < data.len() {
+            let mut g_cursor = 0;
+            while g_cursor < data.len() {
                 // Find the space separating mode and name
-                let G_space_idx = match data[G_cursor..].iter().position(|&b| b == b' ') {
-                    Some(idx) => idx + G_cursor,
+                let g_space_idx = match data[g_cursor..].iter().position(|&b| b == b' ') {
+                    Some(idx) => idx + g_cursor,
                     None => anyhow::bail!("Invalid tree object: missing space after mode"),
                 };
-                let G_mode_str = str::from_utf8(&data[G_cursor..G_space_idx])?;
+                let g_mode_str = str::from_utf8(&data[g_cursor..g_space_idx])?;
 
                 // Find the null byte terminating the name
-                let G_nul_idx = match data[G_space_idx + 1..].iter().position(|&b| b == 0) {
-                    Some(idx) => idx + G_space_idx + 1,
+                let g_nul_idx = match data[g_space_idx + 1..].iter().position(|&b| b == 0) {
+                    Some(idx) => idx + g_space_idx + 1,
                     None => anyhow::bail!("Invalid tree object: missing null terminator after name"),
                 };
-                let G_name_str = str::from_utf8(&data[G_space_idx + 1..G_nul_idx])?;
+                let g_name_str = str::from_utf8(&data[g_space_idx + 1..g_nul_idx])?;
 
                 // The SHA-1 hash is the next 20 bytes
-                let G_sha1_start = G_nul_idx + 1;
-                let G_sha1_end = G_sha1_start + 20;
-                if G_sha1_end > data.len() {
+                let g_sha1_start = g_nul_idx + 1;
+                let g_sha1_end = g_sha1_start + 20;
+                if g_sha1_end > data.len() {
                     anyhow::bail!("Invalid tree object: insufficient data for SHA-1 hash");
                 }
-                let G_sha1_bytes = &data[G_sha1_start..G_sha1_end];
-                let G_sha1_hex = hex::encode(G_sha1_bytes);
+                let g_sha1_bytes = &data[g_sha1_start..g_sha1_end];
+                let g_sha1_hex = hex::encode(g_sha1_bytes);
 
                 // Determine object type from mode (simplified)
-                let G_entry_type = if G_mode_str == "040000" {
+                let g_entry_type = if g_mode_str == "040000" {
                     "tree"
                 } else {
                     "blob"
                 };
 
-                println!("{:06} {} {}\t{}", G_mode_str, G_entry_type, G_sha1_hex, G_name_str);
+                println!("{:06} {} {}\t{}", g_mode_str, g_entry_type, g_sha1_hex, g_name_str);
 
-                G_cursor = G_sha1_end;
+                g_cursor = g_sha1_end;
             }
         }
         "commit" => {

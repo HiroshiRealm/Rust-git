@@ -8,6 +8,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::str;
 use chrono::Utc;
+use hex;
 
 // Hash an object and return its ID
 pub fn hash_object(data: &[u8], object_type: &str) -> String {
@@ -94,14 +95,44 @@ pub fn write_tree(repo: &super::Repository) -> Result<String> {
         let mode_str = format!("{:o}", entry.mode);
         let path_str = path.to_string_lossy();
         
-        tree_entries.push(format!("{} {}\0{}", mode_str, path_str, entry.object_id));
+        // Convert hex object_id to binary
+        let object_id_bytes = hex::decode(&entry.object_id)?;
+        if object_id_bytes.len() != 20 {
+            anyhow::bail!("Invalid SHA-1 hash length: expected 20 bytes, got {}", object_id_bytes.len());
+        }
+        
+        // Create tree entry: mode + space + filename + null + 20-byte sha1
+        let mut entry_data = Vec::new();
+        entry_data.extend_from_slice(mode_str.as_bytes());
+        entry_data.push(b' ');
+        entry_data.extend_from_slice(path_str.as_bytes());
+        entry_data.push(0);
+        entry_data.extend_from_slice(&object_id_bytes);
+        
+        tree_entries.push(entry_data);
     }
     
-    tree_entries.sort();
+    // Sort by filename (Git requirement)
+    tree_entries.sort_by(|a, b| {
+        // Find the filename part (after mode and space, before null byte)
+        let find_filename_string = |entry: &[u8]| -> String {
+            if let Some(space_pos) = entry.iter().position(|&b| b == b' ') {
+                if let Some(null_pos) = entry[space_pos + 1..].iter().position(|&b| b == 0) {
+                    let filename_bytes = &entry[space_pos + 1..space_pos + 1 + null_pos];
+                    return String::from_utf8_lossy(filename_bytes).to_string();
+                }
+            }
+            String::new()
+        };
+        
+        let filename_a = find_filename_string(a);
+        let filename_b = find_filename_string(b);
+        filename_a.cmp(&filename_b)
+    });
     
     let mut tree_content = Vec::new();
     for entry in tree_entries {
-        tree_content.extend_from_slice(entry.as_bytes());
+        tree_content.extend_from_slice(&entry);
     }
     
     write_object(&repo.git_dir.join("objects"), &tree_content, "tree")
