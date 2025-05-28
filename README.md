@@ -38,6 +38,13 @@ cargo build --release
 
 之后运行rust-git即可.
 
+### 提交
+
+运行pack.sh 即会自动生成一个符合提交格式的压缩包,自动使用 "cargo build --features online_judge --release" 编译
+
+注意需要在x86 ISA下编译才行,macOS本地编译的结果提交后是无法运行的.
+
+
 ### Help
 
 rust-git -h/help 即可
