@@ -13,6 +13,7 @@ pub fn execute(remote: &str) -> Result<()> {
     
     let current_branch = repo.current_branch()?;
     
+    #[cfg(not(feature = "online_judge"))]
     println!("Pushing to remote '{}': {}", remote, current_branch);
     
     Ok(())

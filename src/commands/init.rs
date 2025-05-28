@@ -8,6 +8,7 @@ pub fn execute() -> Result<()> {
     // Initialize a new repository
     let repo = Repository::init(&current_dir)?;
     
+    #[cfg(not(feature = "online_judge"))]
     println!("Initialized empty Git repository in {}", repo.git_dir.display());
     
     Ok(())

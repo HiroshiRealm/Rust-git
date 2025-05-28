@@ -17,6 +17,7 @@ pub fn execute(paths: &[String]) -> Result<()> {
         let path = Path::new(path_str);
         
         if !path.exists() {
+            #[cfg(not(feature = "online_judge"))]
             println!("pathspec '{}' did not match any files", path_str);
             continue;
         }
@@ -49,6 +50,7 @@ pub fn execute(paths: &[String]) -> Result<()> {
     repo.index.save(repo.git_dir.join("index"))?;
     
     if !added_files.is_empty() {
+        #[cfg(not(feature = "online_judge"))]
         println!("Added {} file(s) to the index", added_files.len());
     }
     

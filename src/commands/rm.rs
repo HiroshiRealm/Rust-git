@@ -24,6 +24,7 @@ pub fn execute(paths: &[String]) -> Result<()> {
         };
         
         if !full_path.exists() {
+            #[cfg(not(feature = "online_judge"))]
             println!("pathspec '{}' did not match any files (file does not exist)", path_str);
             continue;
         }
@@ -32,6 +33,7 @@ pub fn execute(paths: &[String]) -> Result<()> {
         let removed = repo.index.remove_path(&repo.path, path)?;
         
         if removed.is_empty() {
+            #[cfg(not(feature = "online_judge"))]
             println!("pathspec '{}' did not match any files in the index", path_str);
             continue;
         }
@@ -39,9 +41,11 @@ pub fn execute(paths: &[String]) -> Result<()> {
         // Remove from working directory
         if full_path.is_file() {
             fs::remove_file(&full_path)?;
+            #[cfg(not(feature = "online_judge"))]
             println!("rm '{}'", path_str);
         } else if full_path.is_dir() {
             fs::remove_dir_all(&full_path)?;
+            #[cfg(not(feature = "online_judge"))]
             println!("rm -r '{}'", path_str);
         }
         
@@ -52,6 +56,7 @@ pub fn execute(paths: &[String]) -> Result<()> {
     repo.index.save(repo.git_dir.join("index"))?;
     
     if !removed_files.is_empty() {
+        #[cfg(not(feature = "online_judge"))]
         println!("Removed {} file(s) from the index and working directory", removed_files.len());
     }
     

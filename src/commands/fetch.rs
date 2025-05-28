@@ -11,6 +11,7 @@ pub fn execute(remote: &str) -> Result<()> {
     // In a real implementation, we would connect to the remote repository
     // and download objects and refs
     
+    #[cfg(not(feature = "online_judge"))]
     println!("Fetching from remote '{}'", remote);
     
     Ok(())

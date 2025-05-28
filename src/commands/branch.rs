@@ -12,11 +12,13 @@ pub fn execute(name: Option<&str>, delete: bool) -> Result<()> {
         if delete {
             // Delete branch
             refs::delete_branch(&repo.git_dir, name)?;
+            #[cfg(not(feature = "online_judge"))]
             println!("Deleted branch {}", name);
         } else {
             // Create branch
             let head_commit = refs::get_head_commit(&repo.git_dir)?;
             refs::create_branch(&repo.git_dir, name, &head_commit)?;
+            #[cfg(not(feature = "online_judge"))]
             println!("Created branch {}", name);
         }
     } else {
@@ -24,14 +26,16 @@ pub fn execute(name: Option<&str>, delete: bool) -> Result<()> {
         let branches = refs::list_branches(&repo.git_dir)?;
         let current_branch = repo.current_branch()?;
         
-        if branches.is_empty() {
-            println!("No branches");
-        } else {
-            for branch in branches {
-                if branch == current_branch {
-                    println!("* {}", branch);
-                } else {
-                    println!("  {}", branch);
+        #[cfg(not(feature = "online_judge"))] {
+            if branches.is_empty() {
+                println!("No branches");
+            } else {
+                for branch in branches {
+                    if branch == current_branch {
+                        println!("* {}", branch);
+                    } else {
+                        println!("  {}", branch);
+                    }
                 }
             }
         }

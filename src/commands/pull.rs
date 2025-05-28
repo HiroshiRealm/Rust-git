@@ -12,6 +12,7 @@ pub fn execute(remote: &str) -> Result<()> {
     // 1. Fetch from the remote
     // 2. Merge the fetched branch
     
+    #[cfg(not(feature = "online_judge"))]
     println!("Pulling from remote '{}'", remote);
     
     // Fetch

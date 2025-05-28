@@ -66,6 +66,9 @@ pub fn execute(message: &str) -> Result<()> {
     // Save the index to preserve the current state
     repo.index.save(repo.git_dir.join("index"))?;
     
+    #[cfg(feature = "online_judge")]
+    println!("{}", commit_id);
+    #[cfg(not(feature = "online_judge"))]
     println!("[{}] {}", branch, message);
     
     Ok(())

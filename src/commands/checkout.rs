@@ -19,6 +19,7 @@ pub fn execute(branch_name: &str, create_branch_flag: bool) -> Result<()> {
 
         let head_commit = refs::get_head_commit(&repo.git_dir)?;
         refs::create_branch(&repo.git_dir, branch_name, &head_commit)?;
+        #[cfg(not(feature = "online_judge"))]
         println!("Switched to a new branch '{}'", branch_name);
     } else {
         // Check if the branch exists
@@ -26,6 +27,7 @@ pub fn execute(branch_name: &str, create_branch_flag: bool) -> Result<()> {
         if !branch_path.exists() {
             anyhow::bail!("Branch '{}' not found. If you want to create it, use -b option.", branch_name);
         }
+        #[cfg(not(feature = "online_judge"))]
         println!("Switched to branch '{}'", branch_name);
     }
 
