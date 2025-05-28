@@ -32,6 +32,10 @@
 ### 编译运行
 cargo build --release
 
+如果是需要提交到oj的rust-git可执行文件,需要
+
+"cargo build --features online_judge --release"
+
 之后运行rust-git即可.
 
 ### Help

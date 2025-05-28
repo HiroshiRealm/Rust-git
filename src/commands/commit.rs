@@ -6,7 +6,7 @@ pub fn execute(message: &str) -> Result<()> {
     let current_dir = env::current_dir()?;
     
     // Open the repository
-    let mut repo = Repository::open(&current_dir)?;
+    let repo = Repository::open(&current_dir)?;
     
     // Write the current tree from index
     let current_tree_id = objects::write_tree(&repo)?;
