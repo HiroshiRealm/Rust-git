@@ -135,7 +135,7 @@ mod tests {
         // Create initial HEAD file
         fs::write(
             git_dir.join("HEAD"),
-            "ref: refs/heads/main\n",
+            "ref: refs/heads/master\n",
         )?;
         
         Ok(temp_dir)
@@ -147,8 +147,8 @@ mod tests {
         let git_dir = temp_dir.path();
         
         // Test full ref path
-        let full_ref_path = resolve_ref_path(git_dir, "refs/heads/main");
-        assert_eq!(full_ref_path, git_dir.join("refs/heads/main"));
+        let full_ref_path = resolve_ref_path(git_dir, "refs/heads/master");
+        assert_eq!(full_ref_path, git_dir.join("refs/heads/master"));
         
         // Test HEAD
         let head_ref_path = resolve_ref_path(git_dir, "HEAD");
@@ -169,14 +169,14 @@ mod tests {
         let commit_id = "abcdef0123456789abcdef0123456789abcdef01";
         
         // Update a ref
-        update_ref(git_dir, "refs/heads/main", commit_id)?;
+        update_ref(git_dir, "refs/heads/master", commit_id)?;
         
         // Read it back
-        let read_commit_id = read_ref(git_dir, "refs/heads/main")?;
+        let read_commit_id = read_ref(git_dir, "refs/heads/master")?;
         assert_eq!(read_commit_id, commit_id);
         
         // Should also be able to read it with just the branch name
-        let read_commit_id2 = read_ref(git_dir, "main")?;
+        let read_commit_id2 = read_ref(git_dir, "master")?;
         assert_eq!(read_commit_id2, commit_id);
         
         Ok(())
@@ -190,7 +190,7 @@ mod tests {
         let commit_id = "abcdef0123456789abcdef0123456789abcdef01";
         
         // Update a ref
-        update_ref(git_dir, "refs/heads/main", commit_id)?;
+        update_ref(git_dir, "refs/heads/master", commit_id)?;
         
         // HEAD should now resolve to this commit
         let head_commit = get_head_commit(git_dir)?;
@@ -223,7 +223,7 @@ mod tests {
         
         let commit_id = "abcdef0123456789abcdef0123456789abcdef01";
         
-        // Initially no branches exist (except main which isn't created yet)
+        // Initially no branches exist (except master which isn't created yet)
         let branches = list_branches(git_dir)?;
         assert_eq!(branches.len(), 0);
         

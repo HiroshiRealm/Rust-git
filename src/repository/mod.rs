@@ -51,7 +51,7 @@ impl Repository {
         // Create initial HEAD file
         fs::write(
             git_dir.join("HEAD"),
-            "ref: refs/heads/main\n",
+            "ref: refs/heads/master\n",
         )?;
         
         // Create empty config
@@ -75,7 +75,7 @@ impl Repository {
             "tree"
         )?;
         
-        // Create initial main branch with a null commit
+        // Create initial master branch with a null commit
         let null_commit = objects::write_commit(
             &git_dir.join("objects"),
             "4b825dc642cb6eb9a060e54bf8d69288fbee4904", // Empty tree
@@ -84,9 +84,9 @@ impl Repository {
             "Rust-Git <user@example.com>",
         )?;
         
-        // Create the main branch reference
+        // Create the master branch reference
         fs::write(
-            git_dir.join("refs/heads/main"),
+            git_dir.join("refs/heads/master"),
             format!("{}\n", null_commit),
         )?;
         
@@ -154,12 +154,12 @@ mod tests {
         assert!(repo.git_dir.join("refs/heads").exists());
         assert!(repo.git_dir.join("refs/tags").exists());
         
-        // Check if HEAD points to main branch
+        // Check if HEAD points to master branch
         let head_content = fs::read_to_string(repo.git_dir.join("HEAD"))?;
-        assert_eq!(head_content, "ref: refs/heads/main\n");
+        assert_eq!(head_content, "ref: refs/heads/master\n");
         
         // Check current branch
-        assert_eq!(repo.current_branch()?, "main");
+        assert_eq!(repo.current_branch()?, "master");
         
         Ok(())
     }
@@ -175,7 +175,7 @@ mod tests {
         assert!(repo.git_dir.exists());
         
         // Check current branch
-        assert_eq!(repo.current_branch()?, "main");
+        assert_eq!(repo.current_branch()?, "master");
         
         Ok(())
     }
