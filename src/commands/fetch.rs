@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::env;
 use crate::repository::Repository;
 
-pub fn execute(remote: &str) -> Result<()> {
+pub fn execute(_remote: &str) -> Result<()> {
     let current_dir = env::current_dir()?;
     
     // Open the repository
@@ -12,7 +12,7 @@ pub fn execute(remote: &str) -> Result<()> {
     // and download objects and refs
     
     #[cfg(not(feature = "online_judge"))]
-    println!("Fetching from remote '{}'", remote);
+    println!("Fetching from remote '{}'", _remote);
     
     Ok(())
 } 

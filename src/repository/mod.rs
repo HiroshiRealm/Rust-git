@@ -66,6 +66,15 @@ impl Repository {
             "Unnamed repository; edit this file 'description' to name the repository.\n",
         )?;
         
+        // Ensure the empty tree object exists in the object store
+        // The hash for an empty tree is "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+        // Data for an empty tree is an empty byte array.
+        objects::write_object(
+            &git_dir.join("objects"),
+            &[], // Empty data for an empty tree
+            "tree"
+        )?;
+        
         // Create initial main branch with a null commit
         let null_commit = objects::write_commit(
             &git_dir.join("objects"),

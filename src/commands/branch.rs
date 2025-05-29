@@ -23,15 +23,15 @@ pub fn execute(name: Option<&str>, delete: bool) -> Result<()> {
         }
     } else {
         // List branches
-        let branches = refs::list_branches(&repo.git_dir)?;
-        let current_branch = repo.current_branch()?;
+        let _branches = refs::list_branches(&repo.git_dir)?;
+        let _current_branch = repo.current_branch()?;
         
         #[cfg(not(feature = "online_judge"))] {
-            if branches.is_empty() {
+            if _branches.is_empty() {
                 println!("No branches");
             } else {
-                for branch in branches {
-                    if branch == current_branch {
+                for branch in _branches {
+                    if branch == _current_branch {
                         println!("* {}", branch);
                     } else {
                         println!("  {}", branch);

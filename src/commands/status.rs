@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -15,19 +15,19 @@ struct FileStatus {
 
 pub fn execute() -> Result<()> {
     let current_dir = env::current_dir()?;
-    let repo = Repository::open(&current_dir)?;
+    let _repo = Repository::open(&current_dir)?;
     
     #[cfg(not(feature = "online_judge"))] {
-        println!("On branch {}", repo.current_branch()?);
+        println!("On branch {}", _repo.current_branch()?);
     
         // Get files from HEAD commit
-        let head_files = get_head_files(&repo)?;
+        let head_files = get_head_files(&_repo)?;
         
         // Get files from index
-        let index_files = get_index_files(&repo);
+        let index_files = get_index_files(&_repo);
         
         // Get files from working directory
-        let working_files = get_working_files(&repo)?;
+        let working_files = get_working_files(&_repo)?;
         
         // Debug: show what's actually in the index
         println!("DEBUG: Current index contents:");
