@@ -71,6 +71,67 @@ fn get_tree_content(objects_dir: &Path, tree_id: &str) -> Result<HashMap<String,
     Ok(files)
 }
 
+// Helper function to find the merge base (common ancestor) of two commits
+// This is a simplified implementation that finds the most recent common ancestor
+fn find_merge_base(repo: &Repository, commit1: &str, commit2: &str) -> Result<Option<String>> {
+    // For simplicity, we'll implement a basic algorithm
+    // In a real Git implementation, this would be more sophisticated
+    
+    // Get all ancestors of commit1
+    let mut ancestors1 = std::collections::HashSet::new();
+    let mut queue = vec![commit1.to_string()];
+    
+    while let Some(commit_id) = queue.pop() {
+        if ancestors1.contains(&commit_id) {
+            continue;
+        }
+        ancestors1.insert(commit_id.clone());
+        
+        // Get parents of this commit
+        if let Ok((commit_type, commit_data)) = objects::read_object(&repo.git_dir.join("objects"), &commit_id) {
+            if commit_type == "commit" {
+                let commit_content = String::from_utf8_lossy(&commit_data);
+                for line in commit_content.lines() {
+                    if line.starts_with("parent ") {
+                        let parent_id = line.strip_prefix("parent ").unwrap().trim();
+                        queue.push(parent_id.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    // Find first common ancestor in commit2's ancestry
+    let mut queue = vec![commit2.to_string()];
+    let mut visited = std::collections::HashSet::new();
+    
+    while let Some(commit_id) = queue.pop() {
+        if visited.contains(&commit_id) {
+            continue;
+        }
+        visited.insert(commit_id.clone());
+        
+        if ancestors1.contains(&commit_id) {
+            return Ok(Some(commit_id));
+        }
+        
+        // Get parents of this commit
+        if let Ok((commit_type, commit_data)) = objects::read_object(&repo.git_dir.join("objects"), &commit_id) {
+            if commit_type == "commit" {
+                let commit_content = String::from_utf8_lossy(&commit_data);
+                for line in commit_content.lines() {
+                    if line.starts_with("parent ") {
+                        let parent_id = line.strip_prefix("parent ").unwrap().trim();
+                        queue.push(parent_id.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(None)
+}
+
 pub fn execute(branch_to_merge: &str) -> Result<()> {
     let current_dir = env::current_dir()?;
     let mut repo = Repository::open(&current_dir)?;
@@ -96,82 +157,149 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
         return Ok(());
     }
 
-    // Get file lists for both branches
+    // Find merge base (common ancestor)
+    let merge_base = find_merge_base(&repo, &current_branch_commit_id, &merge_branch_commit_id)?;
+    
+    // Get file lists for three versions
     let current_files = get_files_from_commit(&repo, &current_branch_commit_id)?;
     let merge_files = get_files_from_commit(&repo, &merge_branch_commit_id)?;
+    let base_files = if let Some(base_commit) = &merge_base {
+        get_files_from_commit(&repo, base_commit)?
+    } else {
+        HashMap::new() // No common ancestor, treat as empty
+    };
 
     let mut conflict_found = false;
+    let mut merged_files = HashMap::new();
 
-    // Combine all filenames from both branches
-    let mut all_filenames = current_files.keys().cloned().collect::<std::collections::HashSet<_>>();
+    // Combine all filenames from all three versions
+    let mut all_filenames = std::collections::HashSet::new();
+    all_filenames.extend(current_files.keys().cloned());
     all_filenames.extend(merge_files.keys().cloned());
+    all_filenames.extend(base_files.keys().cloned());
 
     for filename in all_filenames {
-        match (current_files.get(&filename), merge_files.get(&filename)) {
-            (Some(current_file_id), Some(merge_file_id)) => {
-                // File exists in both branches
-                if current_file_id == merge_file_id {
-                    continue; // Files are identical
-                }
+        let base_id = base_files.get(&filename);
+        let current_id = current_files.get(&filename);
+        let merge_id = merge_files.get(&filename);
 
-                // Read content of both files
-                let (_, current_content_data) = objects::read_object(&repo.git_dir.join("objects"), current_file_id)?;
-                let current_content_str = String::from_utf8_lossy(&current_content_data);
-                let current_lines: Vec<&str> = current_content_str.lines().collect();
-
-                let (_, merge_content_data) = objects::read_object(&repo.git_dir.join("objects"), merge_file_id)?;
-                let merge_content_str = String::from_utf8_lossy(&merge_content_data);
-                let merge_lines: Vec<&str> = merge_content_str.lines().collect();
-                
-                let mut diffs = Vec::new();
-                let max_len = std::cmp::max(current_lines.len(), merge_lines.len());
-                let mut i = 0;
-                while i < max_len {
-                    let current_line = current_lines.get(i);
-                    let merge_line = merge_lines.get(i);
-
-                    if current_line != merge_line {
-                        let conflict_start_line = i + 1;
-                        let mut conflict_end_line = conflict_start_line;
-                        i += 1;
-                        while i < max_len {
-                            let cl = current_lines.get(i);
-                            let ml = merge_lines.get(i);
-                            if cl != ml {
-                                conflict_end_line = i + 1;
-                                i += 1;
-                            } else {
-                                break;
-                            }
-                        }
-                        diffs.push((conflict_start_line, conflict_end_line));
-                    } else {
-                        i += 1;
-                    }
-                }
-
-                if !diffs.is_empty() {
+        match (base_id, current_id, merge_id) {
+            // File exists in all three versions
+            (Some(base), Some(current), Some(merge)) => {
+                if base == current && base == merge {
+                    // No changes in either branch
+                    merged_files.insert(filename.clone(), current.clone());
+                } else if base == current && base != merge {
+                    // Only changed in merge branch, use merge version
+                    merged_files.insert(filename.clone(), merge.clone());
+                } else if base != current && base == merge {
+                    // Only changed in current branch, use current version
+                    merged_files.insert(filename.clone(), current.clone());
+                } else if current == merge {
+                    // Both branches made same change
+                    merged_files.insert(filename.clone(), current.clone());
+                } else {
+                    // Both branches changed differently - conflict!
                     conflict_found = true;
-                    for (start, end) in diffs {
-                        if start == end {
-                            println!("Merge conflict in {}: {}", filename, start);
+                    
+                    // For line-level conflict detection, compare file contents
+                    let (_, current_data) = objects::read_object(&repo.git_dir.join("objects"), current)?;
+                    let current_content = String::from_utf8_lossy(&current_data);
+                    let current_lines: Vec<&str> = current_content.lines().collect();
+
+                    let (_, merge_data) = objects::read_object(&repo.git_dir.join("objects"), merge)?;
+                    let merge_content = String::from_utf8_lossy(&merge_data);
+                    let merge_lines: Vec<&str> = merge_content.lines().collect();
+                    
+                    // Find conflicting line ranges
+                    let max_len = std::cmp::max(current_lines.len(), merge_lines.len());
+                    let mut i = 0;
+                    while i < max_len {
+                        let current_line = current_lines.get(i);
+                        let merge_line = merge_lines.get(i);
+
+                        if current_line != merge_line {
+                            let conflict_start = i + 1;
+                            let mut conflict_end = conflict_start;
+                            i += 1;
+                            
+                            while i < max_len {
+                                let cl = current_lines.get(i);
+                                let ml = merge_lines.get(i);
+                                if cl != ml {
+                                    conflict_end = i + 1;
+                                    i += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            
+                            if conflict_start == conflict_end {
+                                println!("Merge conflict in {}: {}", filename, conflict_start);
+                            } else {
+                                println!("Merge conflict in {}: [{}, {}]", filename, conflict_start, conflict_end);
+                            }
                         } else {
-                            println!("Merge conflict in {}: [{}, {}]", filename, start, end);
+                            i += 1;
                         }
                     }
+                    
+                    // For now, use current version in merged result (could be improved)
+                    merged_files.insert(filename.clone(), current.clone());
                 }
             }
-            (None, Some(_merge_file_id)) => {
-                // File only in merge branch (addition)
-                // No conflict for new files
+            // File exists in base and current, but not in merge (deleted in merge)
+            (Some(base), Some(current), None) => {
+                if base == current {
+                    // Not modified in current, deleted in merge - accept deletion
+                    // Don't add to merged_files
+                } else {
+                    // Modified in current, deleted in merge - conflict
+                    conflict_found = true;
+                    println!("Merge conflict in {}: modified in current branch but deleted in merge branch", filename);
+                    // Keep current version
+                    merged_files.insert(filename.clone(), current.clone());
+                }
             }
-            (Some(_current_file_id), None) => {
-                // File only in current branch (deletion in merge branch)
-                // No conflict for deletions
+            // File exists in base and merge, but not in current (deleted in current)
+            (Some(base), None, Some(merge)) => {
+                if base == merge {
+                    // Not modified in merge, deleted in current - accept deletion
+                    // Don't add to merged_files
+                } else {
+                    // Modified in merge, deleted in current - conflict
+                    conflict_found = true;
+                    println!("Merge conflict in {}: modified in merge branch but deleted in current branch", filename);
+                    // Use merge version
+                    merged_files.insert(filename.clone(), merge.clone());
+                }
             }
-            (None, None) => {
-                // Should not happen as we iterate over known filenames
+            // File exists only in current and merge (new in both)
+            (None, Some(current), Some(merge)) => {
+                if current == merge {
+                    // Same new file in both branches
+                    merged_files.insert(filename.clone(), current.clone());
+                } else {
+                    // Different new files - conflict
+                    conflict_found = true;
+                    println!("Merge conflict in {}: different versions of new file", filename);
+                    merged_files.insert(filename.clone(), current.clone());
+                }
             }
+            // File exists only in current (new in current)
+            (None, Some(current), None) => {
+                merged_files.insert(filename.clone(), current.clone());
+            }
+            // File exists only in merge (new in merge)
+            (None, None, Some(merge)) => {
+                merged_files.insert(filename.clone(), merge.clone());
+            }
+            // File exists only in base (deleted in both) - ignore
+            (Some(_), None, None) => {
+                // Both branches deleted the file, accept deletion
+            }
+            // Should not happen
+            (None, None, None) => {}
         }
     }
 
@@ -185,16 +313,7 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
     #[cfg(not(feature = "online_judge"))]
     println!("Merge successful. No conflicts found.");
     
-    // Step 1: Create merged tree by combining files from both branches
-    // Start with current branch files, then add/overwrite with merge branch files
-    let mut merged_files = current_files.clone();
-    
-    // Add or overwrite files from merge branch
-    for (filename, object_id) in merge_files {
-        merged_files.insert(filename, object_id);
-    }
-    
-    // Step 2: Update working directory with merged files
+    // Update working directory with merged files
     // Remove files that exist in current but not in merged result
     for (filename, _) in &current_files {
         if !merged_files.contains_key(filename) {
@@ -220,7 +339,7 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
         }
     }
     
-    // Step 3: Create merge commit
+    // Create merge commit
     let current_tree_id = objects::write_tree(&repo)?;
     let merge_commit_id = objects::write_commit(
         &repo.git_dir.join("objects"),
@@ -230,14 +349,14 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
         "Rust-git <user@example.com>",
     )?;
     
-    // Step 4: Update current branch ref
+    // Update current branch ref
     refs::update_ref(
         &repo.git_dir,
         &format!("refs/heads/{}", current_branch_name),
         &merge_commit_id,
     )?;
     
-    // Step 5: Save updated index
+    // Save updated index
     repo.index.save(repo.git_dir.join("index"))?;
 
     Ok(())
