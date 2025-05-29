@@ -73,11 +73,12 @@ fn get_tree_content(objects_dir: &Path, tree_id: &str) -> Result<HashMap<String,
 
 pub fn execute(branch_to_merge: &str) -> Result<()> {
     let current_dir = env::current_dir()?;
-    let repo = Repository::open(&current_dir)?;
+    let mut repo = Repository::open(&current_dir)?;
     let current_branch_name = repo.current_branch()?;
 
     // Check if trying to merge onto itself
     if current_branch_name == branch_to_merge {
+        #[cfg(not(feature = "online_judge"))]
         println!("Already on '{}'", branch_to_merge);
         return Ok(());
     }
@@ -90,6 +91,7 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
     };
 
     if current_branch_commit_id == merge_branch_commit_id {
+        #[cfg(not(feature = "online_judge"))]
         println!("Already up-to-date.");
         return Ok(());
     }
@@ -161,13 +163,11 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
             }
             (None, Some(_merge_file_id)) => {
                 // File only in merge branch (addition)
-                // According to simplified OJ, we only care about content conflicts in common files.
-                // So, we can choose to ignore this or print a message like "Added: <filename>"
-                // For now, let's stick to the conflict reporting requirement.
+                // No conflict for new files
             }
             (Some(_current_file_id), None) => {
-                // File only in current branch (deletion in merge branch relative to current)
-                // Similar to above, ignore for simplified conflict reporting.
+                // File only in current branch (deletion in merge branch)
+                // No conflict for deletions
             }
             (None, None) => {
                 // Should not happen as we iterate over known filenames
@@ -175,21 +175,70 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
         }
     }
 
-    if !conflict_found {
-        // The original code created a merge commit here.
-        // Based on the prompt, we only report conflicts.
-        // If no conflicts, we could print "Merge successful, no conflicts." or similar.
-        // For now, let's follow the prompt's focus on conflict output.
-        // If no conflicts were printed, it implies a clean merge.
-        // We will NOT create a merge commit or update the working directory as per the simplified rules.
-        println!("Merge successful. No conflicts found in common files.");
-        // Potentially, here one might update the working directory to reflect the merged state
-        // and create a merge commit. But the prompt focuses on conflict *detection*.
+    if conflict_found {
+        #[cfg(not(feature = "online_judge"))]
+        println!("Merge conflicts detected. Please resolve conflicts manually.");
+        return Ok(());
     }
 
-    // The original code created a merge commit and updated refs.
-    // We are removing this part as the task is to report conflicts.
-    // println!("Merged branch '{}' into {}", branch_to_merge, current_branch_name);
+    // If no conflicts, perform the actual merge
+    #[cfg(not(feature = "online_judge"))]
+    println!("Merge successful. No conflicts found.");
+    
+    // Step 1: Create merged tree by combining files from both branches
+    // Start with current branch files, then add/overwrite with merge branch files
+    let mut merged_files = current_files.clone();
+    
+    // Add or overwrite files from merge branch
+    for (filename, object_id) in merge_files {
+        merged_files.insert(filename, object_id);
+    }
+    
+    // Step 2: Update working directory with merged files
+    // Remove files that exist in current but not in merged result
+    for (filename, _) in &current_files {
+        if !merged_files.contains_key(filename) {
+            let file_path = repo.path.join(filename);
+            if file_path.is_file() {
+                std::fs::remove_file(&file_path)?;
+            }
+        }
+    }
+    
+    // Add/update files in working directory
+    for (filename, object_id) in &merged_files {
+        let (obj_type, blob_data) = objects::read_object(&repo.git_dir.join("objects"), object_id)?;
+        if obj_type == "blob" {
+            let file_path = repo.path.join(filename);
+            if let Some(parent) = file_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&file_path, &blob_data)?;
+            
+            // Update index
+            repo.index.add_file(&repo.path, &file_path, object_id)?;
+        }
+    }
+    
+    // Step 3: Create merge commit
+    let current_tree_id = objects::write_tree(&repo)?;
+    let merge_commit_id = objects::write_commit(
+        &repo.git_dir.join("objects"),
+        &current_tree_id,
+        &[&current_branch_commit_id, &merge_branch_commit_id], // Two parents for merge commit
+        &format!("Merge branch '{}' into {}", branch_to_merge, current_branch_name),
+        "Rust-git <user@example.com>",
+    )?;
+    
+    // Step 4: Update current branch ref
+    refs::update_ref(
+        &repo.git_dir,
+        &format!("refs/heads/{}", current_branch_name),
+        &merge_commit_id,
+    )?;
+    
+    // Step 5: Save updated index
+    repo.index.save(repo.git_dir.join("index"))?;
 
     Ok(())
 } 
