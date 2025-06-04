@@ -121,6 +121,20 @@ impl Repository {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let pack_name = format!("pack-{}.pack", timestamp);
         let idx_name = format!("pack-{}.idx", timestamp);
+    
+        // Debugging: Log loose objects
+        println!("Scanning loose objects in {:?}", objects_dir);
+        for entry in fs::read_dir(&objects_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() && entry.file_name().to_str().unwrap().len() == 2 {
+                for object in fs::read_dir(entry.path())? {
+                    let object = object?;
+                    println!("Found loose object: {:?}", object.path());
+                }
+            }
+        }
+    
+        // TODO: Implement packing logic and deletion of loose objects
         let pack_file = pack_dir.join(&pack_name);
         let idx_file = pack_dir.join(&idx_name);
         fs::write(&pack_file, b"")?;
