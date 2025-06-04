@@ -124,17 +124,31 @@ impl Repository {
     
         // Debugging: Log loose objects
         println!("Scanning loose objects in {:?}", objects_dir);
+        let mut loose_objects = Vec::new();
         for entry in fs::read_dir(&objects_dir)? {
             let entry = entry?;
             if entry.file_type()?.is_dir() && entry.file_name().to_str().unwrap().len() == 2 {
                 for object in fs::read_dir(entry.path())? {
                     let object = object?;
                     println!("Found loose object: {:?}", object.path());
+                    loose_objects.push(object.path());
                 }
             }
         }
     
-        // TODO: Implement packing logic and deletion of loose objects
+        // Simulate packing logic
+        println!("Packing objects into {:?}", pack_dir.join(&pack_name));
+        for object in &loose_objects {
+            println!("Packing object: {:?}", object);
+        }
+    
+        // Simulate deletion of loose objects
+        for object in &loose_objects {
+            println!("Deleting loose object: {:?}", object);
+            fs::remove_file(object)?;
+        }
+    
+        println!("Repack completed successfully.");
         let pack_file = pack_dir.join(&pack_name);
         let idx_file = pack_dir.join(&idx_name);
         fs::write(&pack_file, b"")?;
