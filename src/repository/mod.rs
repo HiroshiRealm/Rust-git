@@ -121,7 +121,7 @@ impl Repository {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let pack_name = format!("pack-{}.pack", timestamp);
         let idx_name = format!("pack-{}.idx", timestamp);
-    
+
         // Debugging: Log loose objects
         println!("Scanning loose objects in {:?}", objects_dir);
         let mut loose_objects = Vec::new();
@@ -135,19 +135,21 @@ impl Repository {
                 }
             }
         }
-    
+
         // Simulate packing logic
         println!("Packing objects into {:?}", pack_dir.join(&pack_name));
         for object in &loose_objects {
             println!("Packing object: {:?}", object);
         }
-    
+
         // Simulate deletion of loose objects
         for object in &loose_objects {
             println!("Deleting loose object: {:?}", object);
-            fs::remove_file(object)?;
+            if let Err(e) = fs::remove_file(object) {
+                println!("Failed to delete loose object {:?}: {:?}", object, e);
+            }
         }
-    
+
         println!("Repack completed successfully.");
         let pack_file = pack_dir.join(&pack_name);
         let idx_file = pack_dir.join(&idx_name);
@@ -161,7 +163,9 @@ impl Repository {
                 continue;
             }
             if path.is_dir() {
-                fs::remove_dir_all(&path)?;
+                if let Err(e) = fs::remove_dir_all(&path) {
+                    println!("Failed to remove directory {:?}: {:?}", path, e);
+                }
             }
         }
         Ok(())
