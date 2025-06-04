@@ -88,6 +88,11 @@ enum Commands {
     },
 
     /// Show the working tree status
+    /// Garbage collect unnecessary files and optimize the repository
+    Gc,
+    /// Repack loose objects into a pack file
+    Repack,
+    /// Show the working tree status
     Status,
 }
 
@@ -106,6 +111,8 @@ fn main() -> Result<()> {
         Commands::Pull { remote } => commands::pull::execute(remote)?,
         Commands::Push { remote } => commands::push::execute(remote)?,
         Commands::CatFile { object_hash } => commands::cat_file::execute(object_hash)?,
+        Commands::Gc => commands::gc::execute()?,
+        Commands::Repack => commands::repack::execute()?,
         Commands::Status => commands::status::execute()?,
     }
     

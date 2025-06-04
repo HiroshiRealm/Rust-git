@@ -9,4 +9,6 @@ pub mod fetch;
 pub mod pull;
 pub mod push;
 pub mod cat_file;
-pub mod status; 
+pub mod status;
+pub mod gc;
+pub mod repack;

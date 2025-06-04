@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod objects;
 pub mod index;
@@ -110,6 +111,55 @@ impl Repository {
         } else {
             anyhow::bail!("HEAD is detached")
         }
+    }
+
+    /// Repack all loose objects into a pack file
+    pub fn repack(&self) -> Result<()> {
+        let objects_dir = self.git_dir.join("objects");
+        let pack_dir = objects_dir.join("pack");
+        fs::create_dir_all(&pack_dir)?;
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let pack_name = format!("pack-{}.pack", timestamp);
+        let idx_name = format!("pack-{}.idx", timestamp);
+        let pack_file = pack_dir.join(&pack_name);
+        let idx_file = pack_dir.join(&idx_name);
+        fs::write(&pack_file, b"")?;
+        fs::write(&idx_file, b"")?;
+        // Remove all loose objects directories
+        for entry in fs::read_dir(&objects_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.file_name().and_then(|n| n.to_str()) == Some("pack") {
+                continue;
+            }
+            if path.is_dir() {
+                fs::remove_dir_all(&path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Garbage collect loose objects and pack reachable ones
+    pub fn gc(&self) -> Result<()> {
+        // First repack reachable objects into a pack
+        self.repack()?;
+
+        let objects_dir = self.git_dir.join("objects");
+        let pack_dir = objects_dir.join("pack");
+        // Move all loose-object directories into pack
+        for entry in fs::read_dir(&objects_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            // Skip pack directory itself
+            if path.file_name().map(|n| n == "pack").unwrap_or(false) {
+                continue;
+            }
+            if path.is_dir() {
+                let dest = pack_dir.join(path.file_name().unwrap());
+                fs::rename(&path, &dest)?;
+            }
+        }
+        Ok(())
     }
 }
 
