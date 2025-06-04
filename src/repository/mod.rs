@@ -147,6 +147,8 @@ impl Repository {
             println!("Deleting loose object: {:?}", object);
             if let Err(e) = fs::remove_file(object) {
                 println!("Failed to delete loose object {:?}: {:?}", object, e);
+            } else if object.exists() {
+                println!("Warning: Loose object {:?} still exists after deletion attempt.", object);
             }
         }
 
