@@ -5,7 +5,7 @@ chmod +x "$0"
 # 测试 repack 功能
 tmp=$(mktemp -d)
 mkdir -p "$tmp/repo"
-cp tests/rust-git "$tmp/repo/"
+cp rust-git "$tmp/repo/"
 cd "$tmp/repo"
 
 ./rust-git init
@@ -33,7 +33,7 @@ if [ "$pack_count" -ne 1 ] || [ "$idx_count" -ne 1 ]; then
 fi
 
 # 验证 loose 对象已被删除
-loose_after=$(find .git/objects -type f ! -path "./.git/objects/pack/*" | wc -l)
+loose_after=$(find .git/objects -type f ! -path ".git/objects/pack/*" | wc -l)
 if [ "$loose_after" -ne 0 ]; then
   echo "loose objects not cleaned: $loose_after"
   exit 1
@@ -57,7 +57,7 @@ echo "d" > file4
 ./rust-git gc
 
 # 验证 unreachable 对象已被删除
-loose_after_gc=$(find .git/objects -type f ! -path "./.git/objects/pack/*" | wc -l)
+loose_after_gc=$(find .git/objects -type f ! -path ".git/objects/pack/*" | wc -l)
 if [ "$loose_after_gc" -ne 0 ]; then
   echo "gc failed: loose_after_gc=$loose_after_gc"
   exit 1

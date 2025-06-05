@@ -152,6 +152,31 @@ impl Repository {
             }
         }
 
+        // Log remaining loose objects for debugging with detailed metadata
+        let remaining_objects: Vec<_> = loose_objects
+            .iter()
+            .filter(|object| {
+                let exists = object.exists();
+                println!("Checking object {:?}, exists: {}", object, exists);
+                exists
+            })
+            .collect();
+        if !remaining_objects.is_empty() {
+            println!("Remaining loose objects after deletion attempt:");
+            for object in &remaining_objects {
+                if let Ok(metadata) = fs::metadata(object) {
+                    println!(
+                        "Object: {:?}, Size: {} bytes, Modified: {:?}",
+                        object,
+                        metadata.len(),
+                        metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+                    );
+                } else {
+                    println!("Object: {:?}, Metadata unavailable", object);
+                }
+            }
+        }
+
         println!("Repack completed successfully.");
         let pack_file = pack_dir.join(&pack_name);
         let idx_file = pack_dir.join(&idx_name);
