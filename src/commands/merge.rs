@@ -146,9 +146,14 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
 
     // Get commit IDs
     let current_branch_commit_id = refs::read_ref(&repo.git_dir, &format!("refs/heads/{}", current_branch_name))?;
-    let merge_branch_commit_id = match refs::read_ref(&repo.git_dir, &format!("refs/heads/{}", branch_to_merge)) {
-        Ok(id) => id,
-        Err(_) => anyhow::bail!("Branch '{}' not found", branch_to_merge),
+    
+    // Try to find the branch to merge - could be local branch or remote tracking branch
+    let merge_branch_commit_id = if let Ok(id) = refs::read_ref(&repo.git_dir, &format!("refs/heads/{}", branch_to_merge)) {
+        id
+    } else if let Ok(id) = refs::read_ref(&repo.git_dir, &format!("refs/remotes/{}", branch_to_merge)) {
+        id
+    } else {
+        anyhow::bail!("Branch '{}' not found (checked both local and remote)", branch_to_merge);
     };
 
     if current_branch_commit_id == merge_branch_commit_id {
