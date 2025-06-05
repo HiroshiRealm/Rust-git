@@ -9,6 +9,15 @@ use std::path::Path;
 use std::str;
 use chrono::Utc;
 use hex;
+use std::fs::File;
+use super::Repository;
+use super::pack::PackFile;
+
+#[derive(Debug, Clone)]
+pub struct GitObject {
+    pub object_type: String,
+    pub data: Vec<u8>,
+}
 
 // Hash an object and return its ID
 pub fn hash_object(data: &[u8], object_type: &str) -> String {
@@ -55,33 +64,117 @@ pub fn write_object<P: AsRef<Path>>(objects_dir: P, data: &[u8], object_type: &s
 }
 
 // Read an object from the object store
-pub fn read_object<P: AsRef<Path>>(objects_dir: P, object_id: &str) -> Result<(String, Vec<u8>)> {
-    let dir_name = &object_id[0..2];
-    let file_name = &object_id[2..];
-    
-    let object_path = objects_dir.as_ref().join(dir_name).join(file_name);
-    let compressed = fs::read(object_path)?;
-    
-    let mut decoder = ZlibDecoder::new(&compressed[..]);
-    let mut decompressed = Vec::new();
-    decoder.read_to_end(&mut decompressed)?;
-    
-    // Parse header
-    let null_pos = decompressed
-        .iter()
-        .position(|&b| b == 0)
-        .context("Invalid git object: no null byte")?;
-    
-    let header = str::from_utf8(&decompressed[0..null_pos])?;
-    let parts: Vec<&str> = header.split(' ').collect();
-    if parts.len() != 2 {
-        anyhow::bail!("Invalid git object header");
+pub fn read_object(repo: &Repository, object_id: &str) -> Result<GitObject> {
+    // First try to read from loose objects
+    let object_path = repo.git_dir.join("objects").join(&object_id[0..2]).join(&object_id[2..]);
+    if object_path.exists() {
+        let mut file = File::open(object_path)?;
+        let mut decompressed = Vec::new();
+        let mut decoder = ZlibDecoder::new(&mut file);
+        decoder.read_to_end(&mut decompressed)?;
+
+        let null_pos = decompressed
+            .iter()
+            .position(|&b| b == 0)
+            .context("Invalid git object: no null byte")?;
+
+        let header = std::str::from_utf8(&decompressed[0..null_pos])?;
+        let parts: Vec<&str> = header.split(' ').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Invalid git object header");
+        }
+
+        let object_type = parts[0];
+        let data = decompressed[null_pos + 1..].to_vec();
+
+        return Ok(GitObject {
+            object_type: object_type.to_string(),
+            data,
+        });
     }
-    
-    let object_type = parts[0].to_string();
-    let data = decompressed[null_pos + 1..].to_vec();
-    
-    Ok((object_type, data))
+
+    // If not found in loose objects, try to read from pack files
+    let objects_dir = repo.git_dir.join("objects");
+    let pack_dir = objects_dir.join("pack");
+    if pack_dir.exists() {
+        for entry in fs::read_dir(pack_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("pack") {
+                let pack = PackFile::read(&path)?;
+                if let Some(pack_obj) = pack.objects.get(object_id) {
+                    // If it's a delta object, we need to reconstruct it
+                    if let Some(base_id) = &pack_obj.base_object {
+                        let base_object = if base_id.starts_with("offset:") {
+                            // Handle offset-based delta
+                            let offset = base_id.trim_start_matches("offset:").parse::<u64>()?;
+                            let base_obj = pack.objects.values()
+                                .find(|obj| obj.offset == offset)
+                                .context("Base object not found")?;
+                            let base_id = pack.objects.iter()
+                                .find(|(_, obj)| obj.offset == offset)
+                                .map(|(id, _)| id.clone())
+                                .context("Base object ID not found")?;
+                            read_object(repo, &base_id)?
+                        } else {
+                            // Handle ref-based delta
+                            read_object(repo, base_id)?
+                        };
+
+                        // Apply delta to reconstruct the object
+                        let mut reconstructed = Vec::new();
+                        let mut delta_pos = 0;
+                        
+                        // Skip delta header
+                        while delta_pos < pack_obj.data.len() {
+                            let byte = pack_obj.data[delta_pos];
+                            delta_pos += 1;
+                            if (byte & 0x80) == 0 {
+                                break;
+                            }
+                        }
+
+                        // Apply delta instructions
+                        while delta_pos < pack_obj.data.len() {
+                            let cmd = pack_obj.data[delta_pos];
+                            delta_pos += 1;
+
+                            match cmd {
+                                0x01 => { // Copy command
+                                    let offset = u32::from_le_bytes(pack_obj.data[delta_pos..delta_pos+4].try_into()?);
+                                    let size = u32::from_le_bytes(pack_obj.data[delta_pos+4..delta_pos+8].try_into()?);
+                                    delta_pos += 8;
+                                    
+                                    reconstructed.extend_from_slice(&base_object.data[offset as usize..(offset + size) as usize]);
+                                },
+                                0x02 => { // Insert command
+                                    let size = u32::from_le_bytes(pack_obj.data[delta_pos..delta_pos+4].try_into()?);
+                                    delta_pos += 4;
+                                    
+                                    reconstructed.extend_from_slice(&pack_obj.data[delta_pos..delta_pos+size as usize]);
+                                    delta_pos += size as usize;
+                                },
+                                _ => anyhow::bail!("Invalid delta command: {}", cmd),
+                            }
+                        }
+
+                        return Ok(GitObject {
+                            object_type: pack_obj.object_type.clone(),
+                            data: reconstructed,
+                        });
+                    } else {
+                        // Regular object
+                        return Ok(GitObject {
+                            object_type: pack_obj.object_type.clone(),
+                            data: pack_obj.data.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    anyhow::bail!("Object not found: {}", object_id)
 }
 
 // Create a tree object from the index
@@ -200,11 +293,12 @@ mod tests {
         let object_id = write_blob(&objects_dir, data)?;
         
         // Read the object back
-        let (object_type, content) = read_object(&objects_dir, &object_id)?;
+        let repo = Repository::open(&temp_dir.path())?;
+        let git_object = read_object(&repo, &object_id)?;
         
         // Check that the content and type are correct
-        assert_eq!(object_type, "blob");
-        assert_eq!(content, data);
+        assert_eq!(git_object.object_type, "blob");
+        assert_eq!(git_object.data, data);
         
         Ok(())
     }
@@ -229,11 +323,12 @@ mod tests {
         )?;
         
         // Read the commit back
-        let (object_type, content) = read_object(&objects_dir, &commit_id)?;
+        let repo = Repository::open(&temp_dir.path())?;
+        let git_object = read_object(&repo, &commit_id)?;
         
         // Check that the content and type are correct
-        assert_eq!(object_type, "commit");
-        let content_str = str::from_utf8(&content)?;
+        assert_eq!(git_object.object_type, "commit");
+        let content_str = str::from_utf8(&git_object.data)?;
         
         // Check that the commit contains the expected data
         assert!(content_str.contains(&format!("tree {}", tree_id)));

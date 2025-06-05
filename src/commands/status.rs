@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -127,16 +127,16 @@ fn get_head_files(repo: &Repository) -> Result<HashMap<PathBuf, String>> {
     let mut files = HashMap::new();
     
     if let Ok(head_commit_id) = refs::get_head_commit(&repo.git_dir) {
-        if let Ok((commit_type, commit_data)) = objects::read_object(&repo.git_dir.join("objects"), &head_commit_id) {
-            if commit_type == "commit" {
-                let commit_content = String::from_utf8_lossy(&commit_data);
+        if let Ok(commit_obj) = objects::read_object(repo, &head_commit_id) {
+            if commit_obj.object_type == "commit" {
+                let commit_content = String::from_utf8_lossy(&commit_obj.data);
                 let lines: Vec<&str> = commit_content.lines().collect();
                 if !lines.is_empty() && lines[0].starts_with("tree ") {
                     let tree_id = lines[0].strip_prefix("tree ").unwrap().trim();
                     
-                    if let Ok((tree_type, tree_data)) = objects::read_object(&repo.git_dir.join("objects"), tree_id) {
-                        if tree_type == "tree" {
-                            parse_tree_entries(&tree_data, &mut files)?;
+                    if let Ok(tree_obj) = objects::read_object(repo, tree_id) {
+                        if tree_obj.object_type == "tree" {
+                            parse_tree_entries(&tree_obj.data, &mut files)?;
                         }
                     }
                 }

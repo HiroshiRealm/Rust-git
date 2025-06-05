@@ -52,13 +52,13 @@ fn update_working_directory_and_index(repo: &mut Repository, branch_name: &str, 
     
     // Get current HEAD tree files (if exists)
     let current_tree_files = if let Some(current_head_commit_id) = current_head_commit {
-        let (commit_type, commit_data) = objects::read_object(&repo.git_dir.join("objects"), &current_head_commit_id)?;
-        if commit_type == "commit" {
-            let commit_content = String::from_utf8_lossy(&commit_data);
+        let commit_obj = objects::read_object(&repo, &current_head_commit_id)?;
+        if commit_obj.object_type == "commit" {
+            let commit_content = String::from_utf8_lossy(&commit_obj.data);
             let lines: Vec<&str> = commit_content.lines().collect();
             if !lines.is_empty() && lines[0].starts_with("tree ") {
                 let current_tree_id = lines[0].strip_prefix("tree ").unwrap().trim();
-                get_tree_files(&repo.git_dir.join("objects"), current_tree_id)?
+                get_tree_files(&repo, current_tree_id)?
             } else {
                 HashMap::new()
             }
@@ -70,19 +70,19 @@ fn update_working_directory_and_index(repo: &mut Repository, branch_name: &str, 
     };
     
     // Get target branch tree files
-    let (commit_type, commit_data) = objects::read_object(&repo.git_dir.join("objects"), &target_commit_id)?;
-    if commit_type != "commit" {
-        anyhow::bail!("Expected commit object, got {}", commit_type);
+    let commit_obj = objects::read_object(&repo, &target_commit_id)?;
+    if commit_obj.object_type != "commit" {
+        anyhow::bail!("Expected commit object, got {}", commit_obj.object_type);
     }
     
-    let commit_content = String::from_utf8_lossy(&commit_data);
+    let commit_content = String::from_utf8_lossy(&commit_obj.data);
     let lines: Vec<&str> = commit_content.lines().collect();
     if lines.is_empty() || !lines[0].starts_with("tree ") {
         anyhow::bail!("Invalid commit object format");
     }
     
     let target_tree_id = lines[0].strip_prefix("tree ").unwrap().trim();
-    let target_tree_files = get_tree_files(&repo.git_dir.join("objects"), target_tree_id)?;
+    let target_tree_files = get_tree_files(&repo, target_tree_id)?;
     
     // Step 1: Remove files that exist in current tree but not in target tree
     for (file_path, _) in &current_tree_files {
@@ -100,8 +100,8 @@ fn update_working_directory_and_index(repo: &mut Repository, branch_name: &str, 
     
     // Step 2: Add/update files from target tree
     for (file_path, object_id) in &target_tree_files {
-        let (obj_type, blob_data) = objects::read_object(&repo.git_dir.join("objects"), object_id)?;
-        if obj_type != "blob" {
+        let obj = objects::read_object(&repo, object_id)?;
+        if obj.object_type != "blob" {
             continue; // Skip non-blob objects
         }
         
@@ -110,7 +110,7 @@ fn update_working_directory_and_index(repo: &mut Repository, branch_name: &str, 
         if let Some(parent) = full_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&full_path, &blob_data)?;
+        fs::write(&full_path, &obj.data)?;
         
         // Step 3: Update index only if the file is different from current tree
         // or if it's not in the current tree at all
@@ -157,29 +157,29 @@ fn update_working_directory_and_index(repo: &mut Repository, branch_name: &str, 
 }
 
 // Modified to return HashMap<PathBuf, String>
-fn get_tree_files(objects_dir: &Path, tree_id: &str) -> Result<HashMap<PathBuf, String>> {
+fn get_tree_files(repo: &Repository, tree_id: &str) -> Result<HashMap<PathBuf, String>> {
     let mut files = HashMap::new();
     
-    let (tree_type, tree_data) = objects::read_object(objects_dir, tree_id)?;
-    if tree_type != "tree" {
-        anyhow::bail!("Expected tree object, got {}", tree_type);
+    let tree_obj = objects::read_object(repo, tree_id)?;
+    if tree_obj.object_type != "tree" {
+        anyhow::bail!("Expected tree object, got {}", tree_obj.object_type);
     }
     
     let mut cursor = 0;
-    while cursor < tree_data.len() {
-        if let Some(space_idx) = tree_data[cursor..].iter().position(|&b| b == b' ') {
+    while cursor < tree_obj.data.len() {
+        if let Some(space_idx) = tree_obj.data[cursor..].iter().position(|&b| b == b' ') {
             let space_idx_abs = space_idx + cursor;
             
-            if let Some(null_idx) = tree_data[space_idx_abs + 1..].iter().position(|&b| b == 0) {
+            if let Some(null_idx) = tree_obj.data[space_idx_abs + 1..].iter().position(|&b| b == 0) {
                 let null_idx_abs = null_idx + space_idx_abs + 1;
-                let filename_bytes = &tree_data[space_idx_abs + 1..null_idx_abs];
+                let filename_bytes = &tree_obj.data[space_idx_abs + 1..null_idx_abs];
                 let filename_str = std::str::from_utf8(filename_bytes)?;
                 let filename_path = PathBuf::from(filename_str); // Store as PathBuf
                 
                 let sha1_start = null_idx_abs + 1;
                 let sha1_end = sha1_start + 20;
-                if sha1_end <= tree_data.len() {
-                    let sha1_bytes = &tree_data[sha1_start..sha1_end];
+                if sha1_end <= tree_obj.data.len() {
+                    let sha1_bytes = &tree_obj.data[sha1_start..sha1_end];
                     let sha1_hex = hex::encode(sha1_bytes);
                     
                     files.insert(filename_path, sha1_hex);

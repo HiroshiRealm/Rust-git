@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 pub mod objects;
 pub mod index;
 pub mod refs;
+pub mod pack;
 
 // Utility function for consistent path normalization across the entire system
 pub fn normalize_path(path: &Path) -> PathBuf {

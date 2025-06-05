@@ -22,14 +22,14 @@ pub fn execute(message: &str) -> Result<()> {
     if !parent_commits.is_empty() {
         // Get the tree ID from the previous commit
         let parent_commit_id = &parent_commits[0];
-        let (commit_type, commit_data) = objects::read_object(&repo.git_dir.join("objects"), parent_commit_id)?;
+        let commit_obj = objects::read_object(&repo, parent_commit_id)?;
         
-        if commit_type != "commit" {
-            anyhow::bail!("Expected commit object, got {}", commit_type);
+        if commit_obj.object_type != "commit" {
+            anyhow::bail!("Expected commit object, got {}", commit_obj.object_type);
         }
         
         // Parse the commit to get the tree ID
-        let commit_content = String::from_utf8_lossy(&commit_data);
+        let commit_content = String::from_utf8_lossy(&commit_obj.data);
         let lines: Vec<&str> = commit_content.lines().collect();
         if lines.is_empty() || !lines[0].starts_with("tree ") {
             anyhow::bail!("Invalid commit object format");
@@ -49,7 +49,7 @@ pub fn execute(message: &str) -> Result<()> {
     let parent_refs: Vec<&str> = parent_commits.iter().map(|s| s.as_str()).collect();
     
     let commit_id = objects::write_commit(
-        &repo.git_dir.join("objects"),
+        &repo.git_dir,
         &current_tree_id,
         &parent_refs,
         message,

@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 mod commands;
 mod repository;
+use std::env;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -89,6 +90,12 @@ enum Commands {
 
     /// Show the working tree status
     Status,
+
+    /// Garbage collect unused objects
+    Gc,
+
+    /// Repack objects
+    Repack,
 }
 
 fn main() -> Result<()> {
@@ -107,7 +114,9 @@ fn main() -> Result<()> {
         Commands::Push { remote } => commands::push::execute(remote)?,
         Commands::CatFile { object_hash } => commands::cat_file::execute(object_hash)?,
         Commands::Status => commands::status::execute()?,
+        Commands::Gc => commands::gc::execute()?,
+        Commands::Repack => commands::repack::execute()?,
     }
-    
+
     Ok(())
 }
