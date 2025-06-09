@@ -1,77 +1,88 @@
-# 首先，清理旧的测试环境（如果存在）
-rm -rf /tmp/rust-git-test
+#!/bin/bash
 
-# 创建新的测试环境
-mkdir /tmp/rust-git-test
-cd /tmp/rust-git-test
+# This script no longer functions well because we have changed from path to url. 
 
-# 从你的项目目录复制可执行文件过来
-cp /home/nihaoran/Rust-git/target/debug/rust-git .
+# This script performs an end-to-end test of the local bundle-based
+# fetch/pull/push functionality.
 
-# 在 /tmp/rust-git-test 目录下
-mkdir server_repo client_repo bundles
+set -e
 
-# 进入远程仓库目录
-cd server_repo
+echo "--- Rust-Git Local Bundle End-to-End Test ---"
 
-# 初始化仓库 (使用上一级目录的可执行文件)
-../rust-git init
+# --- Configuration ---
+# Find project root regardless of script execution location
+PROJECT_ROOT=$(cd -- "$(dirname -- "$0")/../.." &> /dev/null && pwd)
+RUST_GIT_BIN="$PROJECT_ROOT/target/debug/rust-git"
+TEST_DIR="/tmp/rust-git-local-test"
 
-# 创建一个文件并提交
+# --- Cleanup function ---
+cleanup() {
+  echo "--- Cleaning up ---"
+  echo "Removing test directory: $TEST_DIR"
+  rm -rf "$TEST_DIR"
+}
+
+trap cleanup EXIT
+
+# --- 1. Build & Setup ---
+echo "--- Building project ---"
+cargo build
+
+echo "--- Setting up test environment in $TEST_DIR ---"
+rm -rf "$TEST_DIR" # Clean previous runs
+mkdir -p "$TEST_DIR/server_repo"
+mkdir -p "$TEST_DIR/client_repo"
+mkdir -p "$TEST_DIR/bundles"
+
+# --- 2. Initialize Server Repo ---
+echo "--- Initializing server repository ---"
+cd "$TEST_DIR/server_repo"
+"$RUST_GIT_BIN" init
 echo "Hello from the server!" > server_file.txt
-../rust-git add server_file.txt
-../rust-git commit -m "Initial commit on server"
+"$RUST_GIT_BIN" add server_file.txt
+"$RUST_GIT_BIN" commit -m "Initial server commit"
 
-# 返回主测试目录
-cd ..
+# --- 3. Simulate a "clone" by creating a bundle and pulling it ---
+echo "--- Simulating clone: Server pushes to bundle, client pulls from bundle ---"
+"$RUST_GIT_BIN" push origin "$TEST_DIR/bundles/initial.bundle"
 
+cd "$TEST_DIR/client_repo"
+"$RUST_GIT_BIN" init
+"$RUST_GIT_BIN" pull origin "$TEST_DIR/bundles/initial.bundle"
 
-
-# 1. 从 server_repo "push" 到一个 bundle 文件
-cd server_repo
-../rust-git push origin ../bundles/initial.bundle
-echo "✅ Pushed server content to a bundle file."
-cd ..
-
-# 2. 从 client_repo "pull" 这个 bundle 文件
-cd client_repo
-../rust-git init
-../rust-git pull origin ../bundles/initial.bundle
-echo "✅ Pulled server bundle into client."
-
-# 3. 验证结果
-if [ -f "server_file.txt" ]; then
-    echo "✅ SUCCESS: server_file.txt has been pulled into the client."
-    cat server_file.txt
+echo "Verifying clone/pull..."
+if [ -f "server_file.txt" ] && [ "$(cat server_file.txt)" = "Hello from the server!" ]; then
+    echo "✅ Pull successful: server_file.txt found with correct content."
 else
-    echo "❌ FAILURE: server_file.txt was not found in the client."
+    echo "❌ Pull FAILED: server_file.txt not found or content mismatch."
+    exit 1
 fi
-cd ..
 
-
-
-
-# 1. 在 client_repo 创建并提交一个新文件
-cd client_repo
+# --- 4. Client pushes an update ---
+echo "--- Client pushing an update ---"
+cd "$TEST_DIR/client_repo"
 echo "A new file from the client." > client_file.txt
-../rust-git add client_file.txt
-../rust-git commit -m "Commit from client"
+"$RUST_GIT_BIN" add client_file.txt
+"$RUST_GIT_BIN" commit -m "Commit from client"
+"$RUST_GIT_BIN" push origin "$TEST_DIR/bundles/client_update.bundle"
 
-# 2. 从 client "push" 到一个新的 bundle
-../rust-git push origin ../bundles/client_update.bundle
-echo "✅ Pushed client update to a new bundle file."
-cd ..
+# --- 5. Server pulls the update ---
+echo "--- Server pulling the client's update ---"
+cd "$TEST_DIR/server_repo"
+"$RUST_GIT_BIN" pull origin "$TEST_DIR/bundles/client_update.bundle"
 
-# 3. 从 server "pull" 客户端的更新
-cd server_repo
-../rust-git pull origin ../bundles/client_update.bundle
-echo "✅ Pulled client bundle into server."
-
-# 4. 验证结果
-if [ -f "client_file.txt" ]; then
-    echo "✅ SUCCESS: client_file.txt has been pulled into the server."
-    cat client_file.txt
+echo "Verifying server update..."
+# Use checkout to update the working directory to the latest master
+"$RUST_GIT_BIN" checkout master
+if [ -f "client_file.txt" ] && [ "$(cat client_file.txt)" = "A new file from the client." ]; then
+    echo "✅ Server update successful: client_file.txt found with correct content."
 else
-    echo "❌ FAILURE: client_file.txt was not found in the server."
+    echo "❌ Server update FAILED: client_file.txt not found or content mismatch."
+    ls -l
+    exit 1
 fi
-cd ..
+
+echo ""
+echo "🎉 All local bundle tests passed successfully! 🎉"
+
+exit 0

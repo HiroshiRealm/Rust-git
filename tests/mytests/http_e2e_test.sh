@@ -16,7 +16,7 @@ echo "--- Rust-Git HTTP End-to-End Test ---"
 
 # --- Configuration ---
 # Assuming the script is run from the project root
-PROJECT_ROOT=$(pwd)
+PROJECT_ROOT=$(cd -- "$(dirname -- "$0")/../.." &> /dev/null && pwd)
 RUST_GIT_BIN="$PROJECT_ROOT/target/debug/rust-git"
 SERVER_BIN="$PROJECT_ROOT/target/debug/server"
 TEST_DIR="/tmp/rust-git-test"
