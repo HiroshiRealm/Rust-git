@@ -9,6 +9,7 @@ use std::path::Path;
 use std::str;
 use chrono::Utc;
 use hex;
+use super::Repository;
 
 // Hash an object and return its ID
 pub fn hash_object(data: &[u8], object_type: &str) -> String {
@@ -161,6 +162,45 @@ pub fn write_commit<P: AsRef<Path>>(
     commit_content.push_str("\n");
     
     write_object(objects_dir, commit_content.as_bytes(), "commit")
+}
+
+/// Check if `potential_ancestor_id` is an ancestor of `commit_id`.
+pub fn is_ancestor(repo: &Repository, potential_ancestor_id: &str, commit_id: &str) -> Result<bool> {
+    if potential_ancestor_id == commit_id {
+        return Ok(true);
+    }
+    
+    let mut queue = vec![commit_id.to_string()];
+    let mut visited = std::collections::HashSet::new();
+
+    while let Some(current_commit_id) = queue.pop() {
+        if !visited.insert(current_commit_id.clone()) {
+            continue; // Already visited this commit
+        }
+
+        if current_commit_id == potential_ancestor_id {
+            return Ok(true);
+        }
+
+        // Get parents of the current commit and add them to the queue
+        if let Ok((commit_type, commit_data)) = read_object(&repo.git_dir.join("objects"), &current_commit_id) {
+            if commit_type == "commit" {
+                let commit_content = String::from_utf8_lossy(&commit_data);
+                for line in commit_content.lines() {
+                    if line.starts_with("parent ") {
+                        if let Some(parent_id) = line.strip_prefix("parent ") {
+                            queue.push(parent_id.trim().to_string());
+                        }
+                    }
+                }
+            }
+        } else {
+            // Could not read object, might be a shallow clone or corrupted history.
+            // For this check, we assume it means the ancestor is not found down this path.
+        }
+    }
+
+    Ok(false)
 }
 
 #[cfg(test)]

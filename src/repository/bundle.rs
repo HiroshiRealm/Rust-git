@@ -6,7 +6,7 @@ use std::io::Write;
 use tar::Builder;
 use walkdir::WalkDir;
 
-use super::Repository;
+use super::{objects, refs, Repository};
 
 /// Creates a bundle file from the repository.
 ///
@@ -105,13 +105,30 @@ pub fn unbundle(repo: &Repository, reader: impl std::io::Read, remote_name: Opti
                     // This is a FETCH operation. Create remote-tracking refs.
                     if let Some(branch_name) = orig_ref_name.strip_prefix("refs/heads/") {
                         let remote_ref_name = format!("refs/remotes/{}/{}", r_name, branch_name);
-                        super::refs::update_ref(git_dir, &remote_ref_name, commit_id)?;
+                        refs::update_ref(git_dir, &remote_ref_name, commit_id)?;
                     }
                 } else {
-                    // This is a PUSH operation. Update the branch ref directly.
+                    // This is a PUSH operation. Check for fast-forward and update the ref.
                     if orig_ref_name.starts_with("refs/heads/") {
-                        // Here we should implement checks for non-fast-forward pushes, but for now we'll just overwrite.
-                        super::refs::update_ref(git_dir, orig_ref_name, commit_id)?;
+                        // Get the server's current commit for this branch.
+                        let server_commit_id_result = refs::read_ref(git_dir, orig_ref_name);
+                        
+                        if let Ok(server_commit_id) = server_commit_id_result {
+                            // The branch exists on the server. Check for fast-forward.
+                            let is_fast_forward = objects::is_ancestor(repo, &server_commit_id, commit_id)?;
+                            
+                            if !is_fast_forward {
+                                anyhow::bail!(
+                                    "non-fast-forward push to branch '{}' is not allowed",
+                                    orig_ref_name
+                                );
+                            }
+                        }
+                        // If the branch doesn't exist on the server (server_commit_id_result is Err),
+                        // it's a new branch, which is always a fast-forward.
+                        
+                        // Update the ref.
+                        refs::update_ref(git_dir, orig_ref_name, commit_id)?;
                     }
                 }
             }
