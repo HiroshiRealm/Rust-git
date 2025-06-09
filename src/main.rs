@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-mod commands;
-mod repository;
+use rust_git::commands;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -66,24 +65,27 @@ enum Commands {
     Fetch {
         /// The remote to fetch from (e.g., "origin")
         remote_name: String,
-        /// The path to the remote bundle file
-        remote_path: String,
+        /// The URL of the remote repository
+        #[arg(name = "REMOTE_URL")]
+        remote_url: String,
     },
     
     /// Fetch from and integrate with another repository
     Pull {
         /// The remote to pull from (e.g., "origin")
         remote_name: String,
-        /// The path to the remote bundle file
-        remote_path: String,
+        /// The URL of the remote repository
+        #[arg(name = "REMOTE_URL")]
+        remote_url: String,
     },
     
     /// Update remote refs along with associated objects
     Push {
         /// The remote to push to (e.g., "origin")
         remote_name: String,
-        /// The path to the destination bundle file
-        remote_path: String,
+        /// The URL of the remote repository
+        #[arg(name = "REMOTE_URL")]
+        remote_url: String,
     },
 
     /// Pretty-print Git objects
@@ -113,9 +115,9 @@ fn main() -> Result<()> {
         Commands::Branch { name, delete } => commands::branch::execute(name.as_deref(), *delete)?,
         Commands::Checkout { branch, create_branch } => commands::checkout::execute(branch, *create_branch)?,
         Commands::Merge { branch } => commands::merge::execute(branch)?,
-        Commands::Fetch { remote_name, remote_path } => commands::fetch::execute(remote_path, remote_name)?,
-        Commands::Pull { remote_name, remote_path } => commands::pull::execute(remote_path, remote_name)?,
-        Commands::Push { remote_name, remote_path } => commands::push::execute(remote_path, remote_name)?,
+        Commands::Fetch { remote_name, remote_url } => commands::fetch::execute(remote_url, remote_name)?,
+        Commands::Pull { remote_name, remote_url } => commands::pull::execute(remote_url, remote_name)?,
+        Commands::Push { remote_name, remote_url } => commands::push::execute(remote_url, remote_name)?,
         Commands::CatFile { object_hash } => commands::cat_file::execute(object_hash)?,
         Commands::Gc => commands::gc::execute()?,
         Commands::Repack => commands::repack::execute()?,

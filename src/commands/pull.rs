@@ -3,15 +3,15 @@ use std::env;
 use crate::repository::Repository;
 use super::{fetch, merge};
 
-pub fn execute(remote_path: &str, remote_name: &str) -> Result<()> {
+pub fn execute(remote_url: &str, remote_name: &str) -> Result<()> {
     let current_dir = env::current_dir()?;
     let repo = Repository::open(&current_dir)?;
 
-    println!("Pulling from remote '{}' at '{}'", remote_name, remote_path);
+    println!("Pulling from remote '{}' at '{}'", remote_name, remote_url);
     
     // 1. Fetch from the remote
     println!("Fetching...");
-    fetch::execute(remote_path, remote_name)?;
+    fetch::execute(remote_url, remote_name)?;
     
     // 2. Merge the fetched branch
     println!("Merging...");
