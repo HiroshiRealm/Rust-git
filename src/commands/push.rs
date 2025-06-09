@@ -1,20 +1,25 @@
 use anyhow::Result;
 use std::env;
-use crate::repository::Repository;
+use std::fs::File;
 
-pub fn execute(_remote: &str) -> Result<()> {
+use crate::repository::{bundle, Repository};
+
+pub fn execute(remote_path: &str, remote_name: &str) -> Result<()> {
     let current_dir = env::current_dir()?;
-    
-    // Open the repository
     let repo = Repository::open(&current_dir)?;
+
+    println!("Pushing to remote '{}' at '{}'", remote_name, remote_path);
+
+    // 1. Create the bundle file at the destination path.
+    let bundle_file = File::create(remote_path)
+        .map_err(|e| anyhow::anyhow!("Failed to create remote bundle at '{}': {}", remote_path, e))?;
+
+    // 2. Call the create_bundle function to generate the bundle from the local repo.
+    bundle::create_bundle(&repo, bundle_file)?;
     
-    // In a real implementation, we would connect to the remote repository
-    // and upload objects and update refs
+    let current_branch = repo.current_branch()?;
     
-    let _current_branch = repo.current_branch()?;
-    
-    #[cfg(not(feature = "online_judge"))]
-    println!("Pushing to remote '{}'", _remote);
+    println!("Successfully pushed branch '{}' to remote '{}'.", current_branch, remote_name);
     
     Ok(())
 } 

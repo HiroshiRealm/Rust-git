@@ -1,18 +1,23 @@
 use anyhow::Result;
 use std::env;
-use crate::repository::Repository;
+use std::fs::File;
 
-pub fn execute(_remote: &str) -> Result<()> {
+use crate::repository::{bundle, Repository};
+
+pub fn execute(remote_path: &str, remote_name: &str) -> Result<()> {
     let current_dir = env::current_dir()?;
+    let repo = Repository::open(&current_dir)?;
+
+    println!("Fetching from remote '{}' at '{}'", remote_name, remote_path);
+
+    // 1. Open the bundle file from the provided path.
+    let bundle_file = File::open(remote_path)
+        .map_err(|e| anyhow::anyhow!("Failed to open remote bundle at '{}': {}", remote_path, e))?;
+
+    // 2. Call the unbundle function to extract objects and update refs.
+    bundle::unbundle(&repo, bundle_file, Some(remote_name))?;
     
-    // Open the repository
-    let _repo = Repository::open(&current_dir)?;
-    
-    // In a real implementation, we would connect to the remote repository
-    // and download objects and refs
-    
-    #[cfg(not(feature = "online_judge"))]
-    println!("Fetching from remote '{}'", _remote);
+    println!("Successfully fetched from remote '{}'.", remote_name);
     
     Ok(())
 } 

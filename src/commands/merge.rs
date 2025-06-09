@@ -146,10 +146,16 @@ pub fn execute(branch_to_merge: &str) -> Result<()> {
 
     // Get commit IDs
     let current_branch_commit_id = refs::read_ref(&repo.git_dir, &format!("refs/heads/{}", current_branch_name))?;
-    let merge_branch_commit_id = match refs::read_ref(&repo.git_dir, &format!("refs/heads/{}", branch_to_merge)) {
-        Ok(id) => id,
-        Err(_) => anyhow::bail!("Branch '{}' not found", branch_to_merge),
-    };
+    
+    // Try to resolve the branch_to_merge argument.
+    // It could be a local branch (e.g., "feature-branch") or a remote-tracking branch (e.g., "origin/master").
+    let merge_branch_commit_id = 
+        // First, check if it's a local branch
+        refs::read_ref(&repo.git_dir, &format!("refs/heads/{}", branch_to_merge))
+        // If not, check if it's a remote-tracking branch
+        .or_else(|_| refs::read_ref(&repo.git_dir, &format!("refs/remotes/{}", branch_to_merge)))
+        // If it's neither, then the branch is not found
+        .map_err(|_| anyhow::anyhow!("Branch '{}' not found", branch_to_merge))?;
 
     if current_branch_commit_id == merge_branch_commit_id {
         #[cfg(not(feature = "online_judge"))]
