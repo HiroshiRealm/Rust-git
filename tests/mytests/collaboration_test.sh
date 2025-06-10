@@ -1,15 +1,7 @@
 #!/bin/bash
 
-# This script simulates a collaboration scenario with two clients and one server
-# to test the non-fast-forward push rejection feature.
-#
-# Workflow:
-# 1. Server starts with an initial commit.
-# 2. Client 1 clones the repo.
-# 3. Client 2 clones the repo.
-# 4. Client 1 pushes a new commit successfully.
-# 5. Client 2, now out of date, tries to push its own commit and fails.
-# 6. Client 2 pulls the changes, merges them, and successfully pushes again.
+# This test simulates a common collaboration scenario where two clients
+# interact with the same remote repository, testing non-fast-forward push rejection.
 
 set -e
 
@@ -37,10 +29,10 @@ trap cleanup EXIT
 
 # --- 1. Build & Setup ---
 echo "--- Building project ---"
-cargo build
+cargo build --quiet
 
 echo "--- Setting up test environment in $TEST_DIR ---"
-rm -rf "$TEST_DIR" # Clean any previous runs
+rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR/server_repo"
 mkdir -p "$TEST_DIR/client1_repo"
 mkdir -p "$TEST_DIR/client2_repo"
@@ -49,82 +41,90 @@ mkdir -p "$TEST_DIR/client2_repo"
 echo "--- Initializing server repository ---"
 cd "$TEST_DIR/server_repo"
 "$RUST_GIT_BIN" init
-echo "Initial file" > initial_file.txt
-"$RUST_GIT_BIN" add initial_file.txt
+echo "Hello from the server!" > common_file.txt
+"$RUST_GIT_BIN" add common_file.txt
 "$RUST_GIT_BIN" commit -m "Initial commit"
 
 echo "--- Starting HTTP server ---"
-"$SERVER_BIN" "$TEST_DIR/server_repo" &
+# Start server in the background and redirect its output to a log file
+"$SERVER_BIN" "$TEST_DIR/server_repo" &> /tmp/rust-git-server.log &
 SERVER_PID=$!
-echo "Server started with PID: $SERVER_PID"
+echo "Server started with PID: $SERVER_PID. Log: /tmp/rust-git-server.log"
 sleep 2
 
-# --- 3. Both clients clone the repo ---
-echo "--- Client 1 cloning... ---"
+# --- 3. Both clients pull the initial state ---
+echo "--- Both clients pulling initial state ---"
 cd "$TEST_DIR/client1_repo"
 "$RUST_GIT_BIN" init
-"$RUST_GIT_BIN" pull origin "$SERVER_URL"
-echo "Client 1 cloned."
+"$RUST_GIT_BIN" remote add origin "$SERVER_URL"
+"$RUST_GIT_BIN" pull origin
+echo "✅ Client 1 pulled initial commit."
 
-echo "--- Client 2 cloning... ---"
 cd "$TEST_DIR/client2_repo"
 "$RUST_GIT_BIN" init
-"$RUST_GIT_BIN" pull origin "$SERVER_URL"
-echo "Client 2 cloned."
+"$RUST_GIT_BIN" remote add origin "$SERVER_URL"
+"$RUST_GIT_BIN" pull origin
+echo "✅ Client 2 pulled initial commit."
 
-# --- 4. Client 1 makes a change and pushes successfully ---
-echo "--- Client 1 pushing a new commit... ---"
+# --- 4. Client 1 pushes a change successfully ---
+echo "--- Client 1 pushing a change... ---"
 cd "$TEST_DIR/client1_repo"
-echo "Change from client 1" > client1_file.txt
+echo "Change from client 1" >> client1_file.txt
 "$RUST_GIT_BIN" add client1_file.txt
-"$RUST_GIT_BIN" commit -m "Client 1 commit"
-"$RUST_GIT_BIN" push origin "$SERVER_URL"
-echo "✅ Client 1 push successful."
+"$RUST_GIT_BIN" commit -m "Commit from client 1"
+"$RUST_GIT_BIN" push origin
+echo "✅ Client 1 pushed successfully."
 
-# --- 5. Client 2 makes a change and fails to push ---
-echo "--- Client 2 attempting a non-fast-forward push (this should fail)... ---"
+# --- 5. Client 2 attempts a non-fast-forward push ---
+echo "--- Client 2 attempting a non-fast-forward push (this must fail)... ---"
 cd "$TEST_DIR/client2_repo"
-echo "Change from client 2" > client2_file.txt
+# Client 2 is now out of date. It makes a different change on a divergent history.
+echo "Change from client 2" >> client2_file.txt
 "$RUST_GIT_BIN" add client2_file.txt
-"$RUST_GIT_BIN" commit -m "Client 2 commit"
+"$RUST_GIT_BIN" commit -m "Commit from client 2"
 
-# We expect this command to fail, so we use '!' to invert the exit code.
-# If it fails (non-zero exit code), '!' makes it success (zero exit code).
-if ! "$RUST_GIT_BIN" push origin "$SERVER_URL" ; then
-    echo "✅ Push correctly failed as non-fast-forward."
-else
-    echo "❌ FAILED: Push was accepted but should have been rejected."
+# This push MUST fail because the remote has commits that client 2 does not have.
+echo "Verifying that non-fast-forward push is rejected..."
+if "$RUST_GIT_BIN" push origin; then
+    echo "❌ Test FAILED: Non-fast-forward push was accepted."
     exit 1
+else
+    echo "✅ Non-fast-forward push was correctly rejected."
 fi
 
-# --- 6. Client 2 pulls, merges, and pushes again ---
-echo "--- Client 2 pulling to resolve conflict... ---"
-"$RUST_GIT_BIN" pull origin "$SERVER_URL"
-# Our merge logic is simple, but since files are different, it should work.
+# --- 6. Client 2 pulls changes and then pushes ---
+echo "--- Client 2 pulling to resolve conflict, then pushing... ---"
+# We expect the pull to create a merge commit.
+"$RUST_GIT_BIN" pull origin
+echo "✅ Client 2 pulled and merged successfully."
 
-echo "--- Client 2 retrying push... ---"
-"$RUST_GIT_BIN" push origin "$SERVER_URL"
-echo "✅ Client 2 second push successful."
+# Now, client 2's history contains the server's changes, so a push should succeed.
+"$RUST_GIT_BIN" push origin
+echo "✅ Client 2's second push attempt successful."
 
 # --- 7. Final Verification ---
-echo "--- Verifying final state on server ---"
+echo "--- Verifying final server state... ---"
 kill $SERVER_PID
-SERVER_PID="" # Prevent cleanup from trying to kill again
-sleep 1
+SERVER_PID=""
+sleep 1 # Give server time to shut down
 
 cd "$TEST_DIR/server_repo"
-# To verify, we'll check out the master branch to update the working directory
 "$RUST_GIT_BIN" checkout master
 
-if [ -f "initial_file.txt" ] && [ -f "client1_file.txt" ] && [ -f "client2_file.txt" ]; then
-    echo "✅ Verification successful: All three files are present on the server."
-else
-    echo "❌ Verification FAILED: Not all files were found on the server."
-    ls -l
-    exit 1
-fi
+assert_exists "common_file.txt"
+assert_exists "client1_file.txt"
+assert_exists "client2_file.txt"
+echo "✅ Server state is correct."
 
 echo ""
-echo "🎉 Collaboration test passed successfully! 🎉"
+echo "🎉 All collaboration tests passed successfully! 🎉"
 
-exit 0 
+exit 0
+
+function assert_exists() {
+    if [ ! -e "$1" ]; then
+        echo "❌ Assertion FAILED: $1 does not exist in $(pwd)."
+        ls -la
+        exit 1
+    fi
+} 

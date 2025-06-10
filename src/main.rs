@@ -67,15 +67,15 @@ enum Commands {
         remote_name: String,
     },
     
-    /// Fetch from and integrate with another repository
+    /// Fetch from and integrate with another repository (currently only works for the current branch)
     Pull {
-        /// The remote to pull from (e.g., "origin")
-        remote_name: String,
+        /// The remote to pull from (e.g., "origin") or a raw URL
+        remote: String,
     },
     
-    /// Update remote refs along with associated objects
+    /// Update remote refs along with associated objects (currently only pushes the current branch)
     Push {
-        /// The remote name (e.g., "origin") or a raw URL
+        /// The remote to push to (e.g., "origin") or a raw URL
         remote: String,
     },
 
@@ -124,7 +124,7 @@ fn main() -> Result<()> {
         Commands::Checkout { branch, create_branch } => commands::checkout::execute(branch, *create_branch)?,
         Commands::Merge { branch } => commands::merge::execute(branch)?,
         Commands::Fetch { remote_name } => commands::fetch::execute(remote_name)?,
-        Commands::Pull { remote_name } => commands::pull::execute(remote_name)?,
+        Commands::Pull { remote } => commands::pull::execute(remote)?,
         Commands::Push { remote } => commands::push::execute(remote)?,
         Commands::Remote { command } => match command {
             RemoteCommands::Add { name, url } => commands::remote::execute("add", name, url)?,
