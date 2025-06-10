@@ -65,27 +65,24 @@ enum Commands {
     Fetch {
         /// The remote to fetch from (e.g., "origin")
         remote_name: String,
-        /// The URL of the remote repository
-        #[arg(name = "REMOTE_URL")]
-        remote_url: String,
     },
     
     /// Fetch from and integrate with another repository
     Pull {
         /// The remote to pull from (e.g., "origin")
         remote_name: String,
-        /// The URL of the remote repository
-        #[arg(name = "REMOTE_URL")]
-        remote_url: String,
     },
     
     /// Update remote refs along with associated objects
     Push {
-        /// The remote to push to (e.g., "origin")
-        remote_name: String,
-        /// The URL of the remote repository
-        #[arg(name = "REMOTE_URL")]
-        remote_url: String,
+        /// The remote name (e.g., "origin") or a raw URL
+        remote: String,
+    },
+
+    /// Manage set of tracked repositories
+    Remote {
+        #[command(subcommand)]
+        command: RemoteCommands,
     },
 
     /// Pretty-print Git objects
@@ -104,6 +101,17 @@ enum Commands {
     Status,
 }
 
+#[derive(Subcommand)]
+enum RemoteCommands {
+    /// Adds a remote named <name> for the repository at <url>
+    Add {
+        /// Name of the remote to add
+        name: String,
+        /// URL of the remote
+        url: String,
+    },
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -115,9 +123,12 @@ fn main() -> Result<()> {
         Commands::Branch { name, delete } => commands::branch::execute(name.as_deref(), *delete)?,
         Commands::Checkout { branch, create_branch } => commands::checkout::execute(branch, *create_branch)?,
         Commands::Merge { branch } => commands::merge::execute(branch)?,
-        Commands::Fetch { remote_name, remote_url } => commands::fetch::execute(remote_url, remote_name)?,
-        Commands::Pull { remote_name, remote_url } => commands::pull::execute(remote_url, remote_name)?,
-        Commands::Push { remote_name, remote_url } => commands::push::execute(remote_url, remote_name)?,
+        Commands::Fetch { remote_name } => commands::fetch::execute(remote_name)?,
+        Commands::Pull { remote_name } => commands::pull::execute(remote_name)?,
+        Commands::Push { remote } => commands::push::execute(remote)?,
+        Commands::Remote { command } => match command {
+            RemoteCommands::Add { name, url } => commands::remote::execute("add", name, url)?,
+        },
         Commands::CatFile { object_hash } => commands::cat_file::execute(object_hash)?,
         Commands::Gc => commands::gc::execute()?,
         Commands::Repack => commands::repack::execute()?,

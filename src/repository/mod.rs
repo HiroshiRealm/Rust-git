@@ -7,6 +7,7 @@ pub mod objects;
 pub mod index;
 pub mod refs;
 pub mod bundle;
+pub mod config;
 
 // Utility function for consistent path normalization across the entire system
 pub fn normalize_path(path: &Path) -> PathBuf {
@@ -22,6 +23,7 @@ pub struct Repository {
     pub path: PathBuf,
     pub git_dir: PathBuf,
     pub index: index::Index,
+    pub config: config::Config,
 }
 
 impl Repository {
@@ -31,11 +33,13 @@ impl Repository {
         let git_dir = find_git_dir(&path)?;
         
         let index = index::Index::load(&git_dir.join("index"))?;
+        let config = config::Config::open(&git_dir.join("config"))?;
         
         Ok(Self {
             path,
             git_dir,
             index,
+            config,
         })
     }
     
@@ -93,11 +97,13 @@ impl Repository {
         )?;
         
         let index = index::Index::new();
+        let config = config::Config::open(&git_dir.join("config"))?;
         
         Ok(Self {
             path,
             git_dir,
             index,
+            config,
         })
     }
     
