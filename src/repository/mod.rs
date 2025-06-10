@@ -1,13 +1,13 @@
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod objects;
 pub mod index;
 pub mod refs;
 pub mod bundle;
 pub mod config;
+pub mod pack;
 
 // Utility function for consistent path normalization across the entire system
 pub fn normalize_path(path: &Path) -> PathBuf {
@@ -123,109 +123,16 @@ impl Repository {
     /// Repack all loose objects into a pack file
     pub fn repack(&self) -> Result<()> {
         let objects_dir = self.git_dir.join("objects");
-        let pack_dir = objects_dir.join("pack");
-        fs::create_dir_all(&pack_dir)?;
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-        let pack_name = format!("pack-{}.pack", timestamp);
-        let idx_name = format!("pack-{}.idx", timestamp);
-
-        // Debugging: Log loose objects
-        println!("Scanning loose objects in {:?}", objects_dir);
-        let mut loose_objects = Vec::new();
-        for entry in fs::read_dir(&objects_dir)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() && entry.file_name().to_str().unwrap().len() == 2 {
-                for object in fs::read_dir(entry.path())? {
-                    let object = object?;
-                    println!("Found loose object: {:?}", object.path());
-                    loose_objects.push(object.path());
-                }
-            }
-        }
-
-        // Simulate packing logic
-        println!("Packing objects into {:?}", pack_dir.join(&pack_name));
-        for object in &loose_objects {
-            println!("Packing object: {:?}", object);
-        }
-
-        // Simulate deletion of loose objects
-        for object in &loose_objects {
-            println!("Deleting loose object: {:?}", object);
-            if let Err(e) = fs::remove_file(object) {
-                println!("Failed to delete loose object {:?}: {:?}", object, e);
-            } else if object.exists() {
-                println!("Warning: Loose object {:?} still exists after deletion attempt.", object);
-            }
-        }
-
-        // Log remaining loose objects for debugging with detailed metadata
-        let remaining_objects: Vec<_> = loose_objects
-            .iter()
-            .filter(|object| {
-                let exists = object.exists();
-                println!("Checking object {:?}, exists: {}", object, exists);
-                exists
-            })
-            .collect();
-        if !remaining_objects.is_empty() {
-            println!("Remaining loose objects after deletion attempt:");
-            for object in &remaining_objects {
-                if let Ok(metadata) = fs::metadata(object) {
-                    println!(
-                        "Object: {:?}, Size: {} bytes, Modified: {:?}",
-                        object,
-                        metadata.len(),
-                        metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
-                    );
-                } else {
-                    println!("Object: {:?}, Metadata unavailable", object);
-                }
-            }
-        }
-
-        println!("Repack completed successfully.");
-        let pack_file = pack_dir.join(&pack_name);
-        let idx_file = pack_dir.join(&idx_name);
-        fs::write(&pack_file, b"")?;
-        fs::write(&idx_file, b"")?;
-        // Remove all loose objects directories
-        for entry in fs::read_dir(&objects_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.file_name().and_then(|n| n.to_str()) == Some("pack") {
-                continue;
-            }
-            if path.is_dir() {
-                if let Err(e) = fs::remove_dir_all(&path) {
-                    println!("Failed to remove directory {:?}: {:?}", path, e);
-                }
-            }
-        }
-        Ok(())
+        pack::create_pack(&objects_dir)
     }
 
     /// Garbage collect loose objects and pack reachable ones
     pub fn gc(&self) -> Result<()> {
-        // First repack reachable objects into a pack
-        self.repack()?;
-
-        let objects_dir = self.git_dir.join("objects");
-        let pack_dir = objects_dir.join("pack");
-        // Move all loose-object directories into pack
-        for entry in fs::read_dir(&objects_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            // Skip pack directory itself
-            if path.file_name().map(|n| n == "pack").unwrap_or(false) {
-                continue;
-            }
-            if path.is_dir() {
-                let dest = pack_dir.join(path.file_name().unwrap());
-                fs::rename(&path, &dest)?;
-            }
-        }
-        Ok(())
+        // In a more complete implementation, gc would first determine which objects are
+        // truly unreachable by traversing the commit graph from all refs.
+        // For now, we treat all loose objects as reachable and pack them.
+        // The cleanup of loose objects is now handled inside create_pack.
+        self.repack()
     }
 }
 

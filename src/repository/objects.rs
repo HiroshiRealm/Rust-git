@@ -55,8 +55,8 @@ pub fn write_object<P: AsRef<Path>>(objects_dir: P, data: &[u8], object_type: &s
     Ok(object_id)
 }
 
-// Read an object from the object store
-pub fn read_object<P: AsRef<Path>>(objects_dir: P, object_id: &str) -> Result<(String, Vec<u8>)> {
+/// Read a raw git object (header + data) from the object store.
+fn read_raw_git_object<P: AsRef<Path>>(objects_dir: P, object_id: &str) -> Result<Vec<u8>> {
     let dir_name = &object_id[0..2];
     let file_name = &object_id[2..];
     
@@ -66,6 +66,12 @@ pub fn read_object<P: AsRef<Path>>(objects_dir: P, object_id: &str) -> Result<(S
     let mut decoder = ZlibDecoder::new(&compressed[..]);
     let mut decompressed = Vec::new();
     decoder.read_to_end(&mut decompressed)?;
+    Ok(decompressed)
+}
+
+// Read an object from the object store and parse its header
+pub fn read_object<P: AsRef<Path>>(objects_dir: P, object_id: &str) -> Result<(String, Vec<u8>)> {
+    let decompressed = read_raw_git_object(objects_dir, object_id)?;
     
     // Parse header
     let null_pos = decompressed
@@ -76,13 +82,32 @@ pub fn read_object<P: AsRef<Path>>(objects_dir: P, object_id: &str) -> Result<(S
     let header = str::from_utf8(&decompressed[0..null_pos])?;
     let parts: Vec<&str> = header.split(' ').collect();
     if parts.len() != 2 {
-        anyhow::bail!("Invalid git object header");
+        anyhow::bail!("Invalid git object header: '{}'", header);
     }
     
     let object_type = parts[0].to_string();
+    let size: usize = parts[1].parse().context("Invalid object size in header")?;
     let data = decompressed[null_pos + 1..].to_vec();
+
+    if data.len() != size {
+        anyhow::bail!(
+            "Object size mismatch for OID {}: header says {} but data is {} bytes",
+            object_id,
+            size,
+            data.len()
+        );
+    }
     
     Ok((object_type, data))
+}
+
+/// Read only the raw data of an object, without the git header.
+/// This is useful for operations like diffing.
+pub fn read_raw_object<P: AsRef<Path>>(objects_dir: P, object_id: &str) -> Result<(String, Vec<u8>)> {
+    // For packing, we need to know the type to group similar objects, and the raw data for diffing.
+    // The existing read_object function already separates type and data, which is what we need.
+    // So this function can just be an alias that properly calls the parsing function.
+    read_object(objects_dir.as_ref(), object_id)
 }
 
 // Create a tree object from the index

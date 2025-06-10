@@ -36,6 +36,7 @@ impl Index {
         file.read_to_end(&mut data)?;
         
         if data.is_empty() {
+            println!("Warning: index file is empty, creating a new one.");
             return Ok(Self::new());
         }
         
