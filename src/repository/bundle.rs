@@ -118,21 +118,21 @@ pub fn unbundle(repo: &Repository, reader: impl std::io::Read, remote_name: Opti
                             if server_commit_id == commit_id {
                                 // The commits are the same, nothing to do.
                             } else {
-                                let is_fast_forward = objects::is_ancestor(repo, &server_commit_id, commit_id)?;
-                                
+                            let is_fast_forward = objects::is_ancestor(repo, &server_commit_id, commit_id)?;
+                            
                                 if is_fast_forward {
                                     refs::update_ref(git_dir, orig_ref_name, commit_id)?;
                                 } else {
-                                    anyhow::bail!(
-                                        "non-fast-forward push to branch '{}' is not allowed",
-                                        orig_ref_name
-                                    );
-                                }
+                                anyhow::bail!(
+                                    "non-fast-forward push to branch '{}' is not allowed",
+                                    orig_ref_name
+                                );
                             }
+                        }
                         } else {
-                            // If the branch doesn't exist on the server (server_commit_id_result is Err),
+                        // If the branch doesn't exist on the server (server_commit_id_result is Err),
                             // it's a new branch, which is always a fast-forward. So we can update.
-                            refs::update_ref(git_dir, orig_ref_name, commit_id)?;
+                        refs::update_ref(git_dir, orig_ref_name, commit_id)?;
                         }
                     }
                 }

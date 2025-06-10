@@ -119,7 +119,7 @@ echo "✅ Server state is correct."
 echo ""
 echo "🎉 All collaboration tests passed successfully! 🎉"
 
-exit 0
+exit 0 
 
 function assert_exists() {
     if [ ! -e "$1" ]; then
